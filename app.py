@@ -8,8 +8,6 @@ import pytz
 
 # --- Basic App Setup ---
 st.set_page_config(
-    page_title=PAGE_TITLE,
-    page_icon=PAGE_ICON,
     layout="wide",
     menu_items=None,  # Hides the top-right menu button
 ) 
