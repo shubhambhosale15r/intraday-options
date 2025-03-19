@@ -256,7 +256,7 @@ elif page == "Buy/Sell Analysis":
         st.warning("⚠️ Unable to fetch data. Please try again later.")
 
     conclusion_data={
-    'Market Trend IV & Chng in OI':[market_trend_iv_chngoi_itmprice],
+    'Market Trend IV & Chng in OI & ITM Price':[market_trend_iv_chngoi_itmprice],
     'Market Trend PCR':[pcr_trend]
     }
     conclusion_data_df=pd.DataFrame(conclusion_data)
