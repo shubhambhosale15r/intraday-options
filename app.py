@@ -5,6 +5,14 @@ import pandas as pd
 from time import sleep, strftime, gmtime
 from streamlit_autorefresh import st_autorefresh
 import pytz
+
+# --- Basic App Setup ---
+st.set_page_config(
+    page_title=PAGE_TITLE,
+    page_icon=PAGE_ICON,
+    layout="wide",
+    menu_items=None,  # Hides the top-right menu button
+) 
 # --- NSE API Base URL ---
 NSE_URL = "https://www.nseindia.com/api/option-chain-indices?symbol={}"
 
