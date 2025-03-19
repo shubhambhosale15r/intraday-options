@@ -16,7 +16,7 @@ HEADERS = {
 }
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
     """Fetch option chain data from NSE for the given symbol using session and cookies."""
     try:
@@ -99,7 +99,8 @@ if page == "Option Chain":
 
     auto_refresh = st.checkbox("Auto Refresh Data", value=False)
     if auto_refresh:
-        st_autorefresh(interval=60000, key="data_refresh")
+        st_autorefresh(interval=180_000, key="data_refresh")
+        st.cache_data.clear()  # Clears cached data so fresh data is fetched
 
     # Get the current UTC time and convert it to IST
     utc_time = datetime.now(pytz.utc)
@@ -149,7 +150,8 @@ elif page == "Buy/Sell Analysis":
 
     auto_refresh = st.checkbox("Auto Refresh Data", value=False)
     if auto_refresh:
-        st_autorefresh(interval=60000, key="data_refresh")
+        st_autorefresh(interval=180_000, key="data_refresh")
+        st.cache_data.clear()  # Clears cached data so fresh data is fetched
 
     # Get the current UTC time and convert it to IST
     utc_time = datetime.now(pytz.utc)
@@ -177,59 +179,88 @@ elif page == "Buy/Sell Analysis":
         call_total = call_itm_df["CE LTP"].sum()
         put_total = put_itm_df["PE LTP"].sum()
 
-        if call_total > 1.25 * put_total:
-            market_trend = "BUY 🟢 (Bullish Market)"
-        elif put_total > 1.25 * call_total:
-            market_trend = "SELL 🔴 (Bearish Market)"
-        else:
-            market_trend = "SIDEWAYS 🔄 (Neutral Market)"
 
-        st.write(f"Market Trend: **{market_trend}**")
+
+        #IV Based Market Trend Analysis
+        # Convert IV columns to numeric (handle missing or '-' values)
+        filtered_df["CE IV"] = pd.to_numeric(filtered_df["CE IV"], errors='coerce')
+        filtered_df["PE IV"] = pd.to_numeric(filtered_df["PE IV"], errors='coerce')
+
+        # Calculate IV Skew
+        otm_put_iv = filtered_df[filtered_df["Strike Price"] > atm_strike]["PE IV"].mean()
+        otm_call_iv = filtered_df[filtered_df["Strike Price"] < atm_strike]["CE IV"].mean()
+        iv_skew = otm_put_iv - otm_call_iv if not pd.isna(otm_put_iv) and not pd.isna(otm_call_iv) else None
+
+        # Sum of Change in OI for OTM strikes
+        otm_put_oi_change = filtered_df[filtered_df["Strike Price"] > atm_strike]["PE Chng in OI"].sum()
+        otm_call_oi_change = filtered_df[filtered_df["Strike Price"] < atm_strike]["CE Chng in OI"].sum()
+
+        # Market Trend Logic based on IV Skew & OTM OI Change
+        if iv_skew is not None:
+            if iv_skew > 0 and otm_put_oi_change > otm_call_oi_change and put_total >  call_total :
+                market_trend_iv_chngoi_itmprice = "SELL 🔴 (Bearish - Traders pricing in downside risk)"
+            elif iv_skew < 0 and otm_call_oi_change > otm_put_oi_change and call_total >  put_total:
+                market_trend_iv_chngoi_itmprice = "BUY 🟢 (Bullish - Traders expecting upside move)"
+            else:
+                market_trend_iv_chngoi_itmprice = "SIDEWAYS 🔄 (Neutral - No clear OI bias)"
+        else:
+            market_trend_iv_chngoi_itmprice = "Data Insufficient to Determine Trend"
+
+        # Display Results
         st.markdown(f"""
-            - **Call Total**: {call_total}
-            - **Put Total**: {put_total}
+            - **Average OTM Put IV**: {otm_put_iv:.2f} &nbsp;&nbsp; ITM Put Price {put_total:.2f}
+            - **Average OTM Call IV**: {otm_call_iv:.2f} &nbsp;&nbsp; ITM Call Price {call_total:.2f}
+            - **IV Skew**: {iv_skew:.2f} ({' Bearish' if iv_skew > 0 else ' Bullish' if iv_skew < 0 else 'Neutral'})
+            - **OTM Put Change in OI**: {otm_put_oi_change}
+            - **OTM Call Change in OI**: {otm_call_oi_change}
+            - Market Trend IV & Chng in OI : **{market_trend_iv_chngoi_itmprice}**
             """)
-        st.subheader("Decision Logic:")
-        st.markdown("""
-            - **BUY 🟢**: ITM Call LTP > 1.25 × ITM Put LTP
-            - **SELL 🔴**: ITM Put LTP > 1.25 × ITM Call LTP
-            - **SIDEWAYS 🔄**: Ratio between 0.8 - 1.25
-            """)
+
+        st.caption("""
+        **Interpretation Guide**:
+        - **Bearish 🔴**: IV Skew > 0 (Puts IV > Calls IV) **AND** OTM Put OI Change > OTM Call OI Change AND ITM PUT > ITM CALL
+        - **Bullish 🟢**: IV Skew < 0 (Calls IV > Puts IV) **AND** OTM Call OI Change > OTM Put OI Change AND ITM CALL > ITM PUT
+        - **Sideways 🔄**: No clear bias
+        """)
+
+
+        # PCR-Based Market Trend Analysis
+
+        # Calculate Total Call OI and Put OI
+        total_call_oi = filtered_df["CE OI"].sum()
+        total_put_oi = filtered_df["PE OI"].sum()
+
+        # Calculate Put-Call Ratio (PCR)
+        pcr_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
+
+        if pcr_ratio > 1.2:
+            pcr_trend = "BUY 🟢 (Bullish based on PCR)"
+        elif pcr_ratio < 0.8:
+            pcr_trend = "SELL 🔴 (Bearish based on PCR)"
+        else:
+            pcr_trend = "SIDEWAYS 🔄 (Neutral based on PCR)"
+            # Display results
+
+
+        st.markdown(f"""
+                        - **Put-Call Ratio (PCR):** {pcr_ratio:.2f}
+                        - **PCR Trend :** {pcr_trend} """)
+
+        st.caption("""
+                                **Interpretation Guide**:
+                                - PCR < 0.8: Traders pricing in downside protection (Bearish)
+                                - PCR > 1.2: Traders expecting upside potential (Bullish)
+                                """)
+
     else:
         st.warning("⚠️ Unable to fetch data. Please try again later.")
 
-        # ... your existing code for market trend ...
-
-        st.subheader("Volatility Skew Analysis")
-    if option_chain_df is not None:
-            selected_expiry = st.selectbox("Select Expiry Date", expiry_dates, key="iv_analysis")
-            filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
-
-            # Convert IV columns to numeric (handle '-' values)
-            filtered_df["CE IV"] = pd.to_numeric(filtered_df["CE IV"], errors='coerce')
-            filtered_df["PE IV"] = pd.to_numeric(filtered_df["PE IV"], errors='coerce')
-
-            # Calculate IV Skew
-            otm_put_iv = filtered_df[filtered_df["Strike Price"] > atm_strike]["PE IV"].mean()
-            otm_call_iv = filtered_df[filtered_df["Strike Price"] < atm_strike]["CE IV"].mean()
-
-            if not pd.isna(otm_put_iv) and not pd.isna(otm_call_iv):
-                iv_skew = otm_put_iv - otm_call_iv
-                interpretation = ("🟢 Bullish (Calls IV > Puts IV)" if iv_skew < 0
-                                  else "🔴 Bearish (Puts IV > Calls IV)")
-
-                st.markdown(f"""
-                - **Average OTM Put IV**: {otm_put_iv:.2f}
-                - **Average OTM Call IV**: {otm_call_iv:.2f}
-                - **IV Skew**: {iv_skew:.2f} ({interpretation})
-                """)
-
-                st.caption("""
-                **Interpretation Guide**:
-                - Positive Skew: Traders pricing in downside protection (Bearish)
-                - Negative Skew: Traders expecting upside potential (Bullish)
-                """)
-            else:
-                st.warning("Could not calculate IV Skew - missing volatility data")
-
+conclusion_data={
+    'Market Trend IV & Chng in OI':[market_trend_iv_chngoi_itmprice],
+    'Market Trend PCR':[pcr_trend]
+}
+conclusion_data_df=pd.DataFrame(conclusion_data)
+# Display Table in Streamlit
+st.subheader("📌 Conclusion")
+st.table(conclusion_data_df)
 
