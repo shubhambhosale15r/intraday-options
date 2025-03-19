@@ -255,12 +255,12 @@ elif page == "Buy/Sell Analysis":
     else:
         st.warning("⚠️ Unable to fetch data. Please try again later.")
 
-conclusion_data={
+    conclusion_data={
     'Market Trend IV & Chng in OI':[market_trend_iv_chngoi_itmprice],
     'Market Trend PCR':[pcr_trend]
-}
-conclusion_data_df=pd.DataFrame(conclusion_data)
-# Display Table in Streamlit
-st.subheader("📌 Conclusion")
-st.table(conclusion_data_df)
+    }
+    conclusion_data_df=pd.DataFrame(conclusion_data)
+    # Display Table in Streamlit
+    st.subheader("📌 Conclusion")
+    st.table(conclusion_data_df)
 
