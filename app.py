@@ -6,19 +6,6 @@ from time import sleep, strftime, gmtime
 from streamlit_autorefresh import st_autorefresh
 import pytz
 
-# Configuration
-PAGE_TITLE = "Intraday Options"
-PAGE_ICON = "📈"
-LOADING_TEXT = "Loading..."
-
-# --- Basic App Setup ---
-st.set_page_config(
-    page_title=PAGE_TITLE,
-    page_icon=PAGE_ICON,
-    layout="wide",
-    menu_items=None,  # Hides the top-right menu button
-)
-
 # --- NSE API Base URL ---
 NSE_URL = "https://www.nseindia.com/api/option-chain-indices?symbol={}"
 
