@@ -21,6 +21,7 @@ def fetch_option_chain(symbol):
     """Fetch option chain data from NSE for the given symbol using session and cookies."""
     try:
         session = requests.Session()
+        session.headers.update(HEADERS)
         session.get("https://www.nseindia.com", headers=HEADERS)
         sleep(1)
         response = session.get(NSE_URL.format(symbol), headers=HEADERS, cookies=session.cookies)
@@ -96,7 +97,7 @@ def fetch_option_chain(symbol):
 # --- Streamlit Interface ---
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
 st.sidebar.title("📊 NSE Option Chain Analyzer")
-page = st.sidebar.radio("Navigation", ["Option Chain", "Buy/Sell Analysis"])
+page = st.sidebar.radio("Navigation", ["Option Chain", "Buy/Sell Analysis","Positional Bets"])
 
 if page == "Option Chain":
     st.title("📈 NSE Option Chain Analyzer")
@@ -146,22 +147,17 @@ if page == "Option Chain":
     else:
         st.warning("⚠️ Unable to fetch data. Please try again later.")
 
-elif page == "Buy/Sell Analysis":
-    st.title("📊 Market Trend Analysis")
+if page in ["Buy/Sell Analysis", "Positional Bets"]:
+    st.title("📊 Market Trend Analysis" if page == "Buy/Sell Analysis" else "📊 Positional Bets Analysis")
 
     auto_refresh = st.checkbox("Auto Refresh Data", value=False)
     if auto_refresh:
         st_autorefresh(interval=180_000, key="data_refresh")
         st.cache_data.clear()  # Clears cached data so fresh data is fetched
 
-    # Get the current UTC time and convert it to IST
     utc_time = datetime.now(pytz.utc)
-
-    # Convert to IST (Indian Standard Time)
     ist_timezone = pytz.timezone("Asia/Kolkata")
     ist_time = utc_time.astimezone(ist_timezone)
-
-    # Display the formatted IST time in the Streamlit app
     st.write(f"Last Updated: {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
 
     symbol_list = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
@@ -170,10 +166,13 @@ elif page == "Buy/Sell Analysis":
     option_chain_df, expiry_dates, atm_strike = fetch_option_chain(selected_symbol)
 
     if option_chain_df is not None:
-        selected_expiry = st.selectbox("Select Expiry Date", expiry_dates, key="expiry_analysis")
-        filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
+        if page == "Buy/Sell Analysis":
+            selected_expiry = st.selectbox("Select Expiry Date", expiry_dates, key="expiry_analysis")
+            filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
+        else:
+            filtered_df = option_chain_df  # Use all expiry dates for "Positional Bets"
 
-        # ----- PCR-Based Market Trend Analysis -----
+        # --- PCR-Based Market Trend Analysis ---
         total_call_oi = filtered_df["CE OI"].sum()
         total_put_oi = filtered_df["PE OI"].sum()
         pcr_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
@@ -195,18 +194,19 @@ elif page == "Buy/Sell Analysis":
                                 - PCR > 1.2: Traders expecting upside potential (Bullish)
                                 """)
 
-        # ----- Intrinsic Value Strategy -----
-        # Try to locate the ATM row using the pre-calculated ATM strike
-        atm_row = filtered_df[filtered_df["Strike Price"] == atm_strike]
-        if not atm_row.empty:
-            ce_ltp = atm_row["CE LTP"].iloc[0]
-            ce_intrinsic = atm_row["CE Intrinsic Value"].iloc[0]
-            pe_ltp = atm_row["PE LTP"].iloc[0]
-            pe_intrinsic = atm_row["PE Intrinsic Value"].iloc[0]
+        # --- Intrinsic Value Strategy (Considering 5 ITM Strikes) ---
+        itm_calls = filtered_df[filtered_df["Strike Price"] < atm_strike].nlargest(5, "Strike Price")
+        itm_puts = filtered_df[filtered_df["Strike Price"] > atm_strike].nsmallest(5, "Strike Price")
 
-            if ce_ltp > ce_intrinsic and pe_ltp < pe_intrinsic:
+        if not itm_calls.empty and not itm_puts.empty:
+            avg_ce_ltp = itm_calls["CE LTP"].mean()
+            avg_ce_intrinsic = itm_calls["CE Intrinsic Value"].mean()
+            avg_pe_ltp = itm_puts["PE LTP"].mean()
+            avg_pe_intrinsic = itm_puts["PE Intrinsic Value"].mean()
+
+            if avg_ce_ltp > avg_ce_intrinsic and avg_pe_ltp < avg_pe_intrinsic:
                 intrinsic_strategy = "BUY 🟢 (Call premium above intrinsic & Put premium below intrinsic)"
-            elif pe_ltp > pe_intrinsic and ce_ltp < ce_intrinsic:
+            elif avg_pe_ltp > avg_pe_intrinsic and avg_ce_ltp < avg_ce_intrinsic:
                 intrinsic_strategy = "SELL 🔴 (Put premium above intrinsic & Call premium below intrinsic)"
             else:
                 intrinsic_strategy = "SIDEWAYS 🔄 (No clear intrinsic bias)"
@@ -217,7 +217,7 @@ elif page == "Buy/Sell Analysis":
                         - **Intrinsic Strategy:** {intrinsic_strategy}
                         """)
 
-        # ----- Combine Conclusions -----
+        # --- Combine Conclusions ---
         conclusion_data = {
             'Market Trend PCR': [pcr_trend],
             'Intrinsic Strategy': [intrinsic_strategy]
@@ -225,5 +225,6 @@ elif page == "Buy/Sell Analysis":
         conclusion_data_df = pd.DataFrame(conclusion_data)
         st.subheader("📌 Conclusion")
         st.table(conclusion_data_df)
+
     else:
         st.warning("⚠️ Unable to fetch data. Please try again later.")
