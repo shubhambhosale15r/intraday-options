@@ -53,7 +53,7 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False based on your environment
+    HEADLESS = True  # or False based on your setup
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
@@ -61,19 +61,17 @@ def get_selenium_driver():
     else:
         chrome_options.add_argument("start-maximized")
     
-    # Make sure get_random_user_agent() is defined elsewhere in your code
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # Remove the version parameter since it's not supported in your webdriver_manager version
-    service = Service(ChromeDriverManager().install())
-    
+    # This will automatically download and install the correct chromedriver version
+    chromedriver_autoinstaller.install()
+
     try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
-
 
 def create_session():
     # Use Selenium to retrieve cookies from the NSE home page
