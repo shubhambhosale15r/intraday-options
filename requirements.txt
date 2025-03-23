@@ -2,5 +2,5 @@ streamlit
 pandas
 requests
 selenium
-webdriver-manager
+webdriver-manager>=3.8.6
 pytz
