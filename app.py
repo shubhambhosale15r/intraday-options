@@ -53,7 +53,7 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False, based on your needs
+    HEADLESS = True  # or False based on your needs
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
@@ -61,16 +61,15 @@ def get_selenium_driver():
     else:
         chrome_options.add_argument("start-maximized")
     
-    # Assume get_random_user_agent() is defined elsewhere
+    # Ensure get_random_user_agent() is defined elsewhere
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # Provide the path to the correct chromedriver binary for Chromium 120
-    chromedriver_path = os.path.join(os.path.dirname(__file__), "drivers", "chromedriver")
-    service = Service(chromedriver_path)
-    
+    # This will check for the matching driver and download it if needed.
+    chromedriver_autoinstaller.install()  
+
     try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
