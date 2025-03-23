@@ -43,6 +43,9 @@ os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
 os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
 HEADLESS = True  # Set to False for local development
 
+# Set a valid directory for webdriver_manager cache
+os.environ["WDM_LOCAL"] = "/tmp/.wdm"
+
 def get_selenium_driver():
     chrome_options = Options()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
@@ -50,11 +53,11 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False based on your setup
+    HEADLESS = True  # or False based on your environment
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-        chrome_options.binary_location = "/usr/bin/chromium"  # Path to Chromium in your environment
+        chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
     
@@ -62,7 +65,7 @@ def get_selenium_driver():
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # Remove the version parameter to work with webdriver_manager 4.0.2
+    # Remove the version parameter since it's not supported in your webdriver_manager version
     service = Service(ChromeDriverManager().install())
     
     try:
