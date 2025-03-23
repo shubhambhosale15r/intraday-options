@@ -47,7 +47,15 @@ os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
 os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
 HEADLESS = True  # Set to False for local development
 
-os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = "/tmp/chromedriver_autoinstaller"
+# Define a writable directory for the driver cache
+CHROMEDRIVER_ROOT = "/tmp/chromedriver_autoinstaller"
+os.makedirs(CHROMEDRIVER_ROOT, exist_ok=True)
+os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = CHROMEDRIVER_ROOT
+
+# Now import the module
+import chromedriver_autoinstaller
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 def get_selenium_driver():
     chrome_options = Options()
@@ -68,7 +76,7 @@ def get_selenium_driver():
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
     
-    # This will install the correct ChromeDriver version in /tmp/chromedriver_autoinstaller
+    # This will install the correct ChromeDriver version into /tmp/chromedriver_autoinstaller
     chromedriver_autoinstaller.install()
     
     try:
