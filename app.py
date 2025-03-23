@@ -44,38 +44,27 @@ HEADLESS = True  # Set to False for local development
 
 def get_selenium_driver():
     chrome_options = Options()
-    
-    # Common configuration
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    # Headless mode configuration for Streamlit Cloud
+    HEADLESS = True  # or False, depending on your configuration
     if HEADLESS:
-        chrome_options.add_argument("--headless=new")  # Use new headless mode
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-        chrome_options.binary_location = "/usr/bin/chromium"  # Verified Chromium path
+        chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
 
-    # User agent rotation (ensure get_random_user_agent() is defined)
+    # Ensure get_random_user_agent() is defined elsewhere
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # Configure ChromeDriver with explicit version matching
-    service = Service(
-        ChromeDriverManager(
-            version="120.0.6099.109"  # Exact version for Chromium 120
-        ).install()
-    )
+    service = Service(ChromeDriverManager(version="120.0.6099.109").install())
 
-    # Initialize driver with error handling
     try:
-        driver = webdriver.Chrome(
-            service=service,
-            options=chrome_options
-        )
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
