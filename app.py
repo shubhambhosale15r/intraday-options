@@ -48,7 +48,7 @@ def get_selenium_driver():
         chrome_options.add_argument("--enable-unsafe-swiftshader")
         chrome_options.add_argument("window-size=1920,1080")
         # Set the binary location to the installed Chromium binary
-        chrome_options.binary_location = "/usr/bin/chromium-browser"
+        chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
 
