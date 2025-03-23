@@ -50,20 +50,21 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False, depending on your configuration
+    HEADLESS = True  # or False based on your setup
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-        chrome_options.binary_location = "/usr/bin/chromium"
+        chrome_options.binary_location = "/usr/bin/chromium"  # Path to Chromium in your environment
     else:
         chrome_options.add_argument("start-maximized")
-
-    # Ensure get_random_user_agent() is defined elsewhere
+    
+    # Make sure get_random_user_agent() is defined elsewhere in your code
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    service = Service(ChromeDriverManager(version="120.0.6099.109").install())
-
+    # Remove the version parameter to work with webdriver_manager 4.0.2
+    service = Service(ChromeDriverManager().install())
+    
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
