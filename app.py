@@ -12,6 +12,10 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import webdriver_manager
+import chromedriver_autoinstaller  
+
+
+
 print("webdriver_manager version:", webdriver_manager.__version__)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
