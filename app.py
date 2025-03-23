@@ -59,7 +59,7 @@ def get_selenium_driver():
 
     # Use webdriver_manager with Service to manage the ChromeDriver
     # Forces re-download every time (0 days cache validity)
-service = Service(ChromeDriverManager(cache_valid_range=0).install())
+    service = Service(ChromeDriverManager(cache_valid_range=0).install())
 
 
     driver = webdriver.Chrome(service=service, options=chrome_options)
