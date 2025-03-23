@@ -47,8 +47,7 @@ os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
 os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
 HEADLESS = True  # Set to False for local development
 
-# Set webdriver_manager cache directory as before (optional)
-os.environ["WDM_LOCAL"] = "/tmp/.wdm"
+os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = "/tmp/chromedriver_autoinstaller"
 
 def get_selenium_driver():
     chrome_options = Options()
@@ -57,7 +56,7 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False based on your needs
+    HEADLESS = True  # or False based on your setup
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
@@ -65,18 +64,19 @@ def get_selenium_driver():
     else:
         chrome_options.add_argument("start-maximized")
     
-    # Ensure get_random_user_agent() is defined elsewhere
+    # Ensure get_random_user_agent() is defined elsewhere in your code
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
-
-    # This will check for the matching driver and download it if needed.
-    chromedriver_autoinstaller.install()  
-
+    
+    # This will install the correct ChromeDriver version in /tmp/chromedriver_autoinstaller
+    chromedriver_autoinstaller.install()
+    
     try:
         driver = webdriver.Chrome(options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
+
 
 def create_session():
     # Use Selenium to retrieve cookies from the NSE home page
