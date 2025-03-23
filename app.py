@@ -1,4 +1,8 @@
 import os
+import tempfile
+# Create a writable temporary directory
+custom_temp_dir = tempfile.mkdtemp(prefix="chromedriver_autoinstaller_")
+os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = custom_temp_dir
 import time
 import random
 import requests
