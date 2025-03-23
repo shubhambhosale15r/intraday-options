@@ -43,7 +43,7 @@ os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
 os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
 HEADLESS = True  # Set to False for local development
 
-# Set a valid directory for webdriver_manager cache
+# Set webdriver_manager cache directory as before (optional)
 os.environ["WDM_LOCAL"] = "/tmp/.wdm"
 
 def get_selenium_driver():
@@ -53,7 +53,7 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False based on your setup
+    HEADLESS = True  # or False, based on your needs
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
@@ -61,14 +61,16 @@ def get_selenium_driver():
     else:
         chrome_options.add_argument("start-maximized")
     
+    # Assume get_random_user_agent() is defined elsewhere
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # This will automatically download and install the correct chromedriver version
-    chromedriver_autoinstaller.install()
-
+    # Provide the path to the correct chromedriver binary for Chromium 120
+    chromedriver_path = os.path.join(os.path.dirname(__file__), "drivers", "chromedriver")
+    service = Service(chromedriver_path)
+    
     try:
-        driver = webdriver.Chrome(options=chrome_options)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
