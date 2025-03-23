@@ -37,33 +37,48 @@ def get_random_user_agent():
     return random.choice(USER_AGENTS)
 
 
+# Streamlit Cloud specific configuration
+os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
+os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
+HEADLESS = True  # Set to False for local development
+
 def get_selenium_driver():
     chrome_options = Options()
+    
+    # Common configuration
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Recommended for cloud environments
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    
     # Headless mode configuration for Streamlit Cloud
     if HEADLESS:
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--enable-unsafe-swiftshader")
+        chrome_options.add_argument("--headless=new")  # Use new headless mode
         chrome_options.add_argument("window-size=1920,1080")
-        # Set the binary location to the installed Chromium binary
-        chrome_options.binary_location = "/usr/bin/chromium"
+        chrome_options.binary_location = "/usr/bin/chromium"  # Verified Chromium path
     else:
         chrome_options.add_argument("start-maximized")
 
-    # Rotate user agent
+    # User agent rotation (ensure get_random_user_agent() is defined)
     ua = get_random_user_agent()
-    chrome_options.add_argument(f"--user-agent={ua}")
+    chrome_options.add_argument(f"user-agent={ua}")
 
-    # Use webdriver_manager with Service to manage the ChromeDriver
-    # Forces re-download every time (0 days cache validity)
-    service = Service(ChromeDriverManager().install(force=True))
+    # Configure ChromeDriver with explicit version matching
+    service = Service(
+        ChromeDriverManager(
+            version="120.0.6099.109"  # Exact version for Chromium 120
+        ).install()
+    )
 
-
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+    # Initialize driver with error handling
+    try:
+        driver = webdriver.Chrome(
+            service=service,
+            options=chrome_options
+        )
+        return driver
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
 
 
 def create_session():
