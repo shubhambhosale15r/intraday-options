@@ -58,7 +58,7 @@ def get_selenium_driver():
     chrome_options.add_argument(f"--user-agent={ua}")
 
     # Use webdriver_manager with Service to manage the ChromeDriver
-    service = Service(ChromeDriverManager(version="134.0.6998.165").install())
+    service = Service(ChromeDriverManager(driver_version="134.0.6998.165").install())
 
 
     driver = webdriver.Chrome(service=service, options=chrome_options)
