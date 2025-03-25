@@ -1,8 +1,5 @@
 import os
 import tempfile
-# Create a writable temporary directory
-custom_temp_dir = tempfile.mkdtemp(prefix="chromedriver_autoinstaller_")
-os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = custom_temp_dir
 import time
 import random
 import requests
@@ -16,9 +13,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import webdriver_manager
-import chromedriver_autoinstaller  
-
-
+import chromedriver_autoinstaller
 
 print("webdriver_manager version:", webdriver_manager.__version__)
 # Configure logging
@@ -38,21 +33,19 @@ PROXIES = []  # e.g., ["http://123.456.78.90:8080", "http://98.76.54.32:3128"]
 NSE_API_URL = "https://www.nseindia.com/api/option-chain-indices?symbol={}"
 NSE_HOME_URL = "https://www.nseindia.com/"
 
-# Configuration flag for headless mode (set to True for production and for running in Streamlit Cloud)
+# Configuration flag for headless mode (set to False for local development)
 HEADLESS = True
-
 
 def get_random_user_agent():
     return random.choice(USER_AGENTS)
 
+# Local machine configuration:
+# Remove the following environment settings if you don't face permission issues.
+# os.environ['WDM_LOCAL'] = "1"
+# os.environ['WDM_SSL_VERIFY'] = "0"
 
-# Streamlit Cloud specific configuration
-os.environ['WDM_LOCAL'] = "1"  # Fixes permission issues in cloud environment
-os.environ['WDM_SSL_VERIFY'] = "0"  # Disables SSL verification if needed
-HEADLESS = True  # Set to False for local development
-
-# Define a writable directory for the driver cache
-CHROMEDRIVER_ROOT = "/tmp/chromedriver_autoinstaller"
+# Define a writable directory for the driver cache (optional change)
+CHROMEDRIVER_ROOT = os.path.join(tempfile.gettempdir(), "chromedriver_autoinstaller")
 os.makedirs(CHROMEDRIVER_ROOT, exist_ok=True)
 os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = CHROMEDRIVER_ROOT
 
@@ -68,19 +61,19 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     
-    HEADLESS = True  # or False based on your setup
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-        chrome_options.binary_location = "/usr/bin/chromium"
+        # For local machines, you usually don't need to specify the binary location unless you use Chromium.
+        # chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
     
-    # Ensure get_random_user_agent() is defined elsewhere in your code
+    # Set a random user agent
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
     
-    # This will install the correct ChromeDriver version into /tmp/chromedriver_autoinstaller
+    # This will install the correct ChromeDriver version if not present
     chromedriver_autoinstaller.install()
     
     try:
@@ -88,7 +81,6 @@ def get_selenium_driver():
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
-
 
 def create_session():
     # Use Selenium to retrieve cookies from the NSE home page
@@ -119,7 +111,6 @@ def create_session():
     for cookie in selenium_cookies:
         session.cookies.set(cookie['name'], cookie['value'])
     return session
-
 
 @st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
@@ -203,12 +194,10 @@ def fetch_option_chain(symbol):
 
     return df, expiry_dates, atm_strike
 
-
 def display_time():
     utc_time = datetime.now(pytz.utc)
     ist_time = utc_time.astimezone(pytz.timezone("Asia/Kolkata"))
     st.write(f"Last Updated: {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
-
 
 def setup_autorefresh():
     from streamlit_autorefresh import st_autorefresh
@@ -216,7 +205,6 @@ def setup_autorefresh():
     refresh_interval_ms = random.randint(60000, 180000)
     st_autorefresh(refresh_interval_ms, key="data_refresh")
     st.cache_data.clear()
-
 
 # --- Streamlit Interface ---
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
@@ -241,10 +229,8 @@ if page == "Option Chain":
         filtered_df = filtered_df.reset_index(drop=True)
         filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
 
-
         def highlight_atm(row):
             return ['background-color: yellow; color: black' if row['Strike Price'] == atm_strike else '' for _ in row]
-
 
         st.subheader(f"📅 Option Chain for {selected_symbol} - {selected_expiry}")
         if atm_strike:
