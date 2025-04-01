@@ -16,7 +16,6 @@ import webdriver_manager
 import chromedriver_autoinstaller
 
 print("webdriver_manager version:", webdriver_manager.__version__)
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -78,13 +77,16 @@ def get_selenium_driver():
 
 
 def create_session():
+    # Use Selenium to retrieve cookies from the NSE home page
     driver = get_selenium_driver()
     driver.get(NSE_HOME_URL)
+    # Instead of fixed sleep, consider explicit waits if needed
     time.sleep(random.uniform(4, 6))
     selenium_cookies = driver.get_cookies()
     driver.quit()
 
     session = requests.Session()
+    # Rotate the user agent in session headers
     ua = get_random_user_agent()
     session.headers.update({
         "User-Agent": ua,
@@ -93,14 +95,15 @@ def create_session():
         "Referer": "https://www.nseindia.com/option-chain",
     })
 
+    # Optional: Set a random proxy from the list if available
     if PROXIES:
         proxy = random.choice(PROXIES)
         session.proxies.update({"http": proxy, "https": proxy})
         logging.info(f"Using proxy: {proxy}")
 
+    # Transfer cookies from Selenium to the requests session
     for cookie in selenium_cookies:
         session.cookies.set(cookie['name'], cookie['value'])
-    
     return session
 
 
@@ -136,21 +139,55 @@ def fetch_option_chain(symbol):
                 "Underlying Value": underlying_value
             }
             if "CE" in entry:
+                ce = entry["CE"]
                 row.update({
-                    "CE OI": entry["CE"].get("openInterest", 0),
-                    "CE Chng": entry["CE"].get("change", 0),
+                    "CE OI": ce.get("openInterest", 0),
+                    "CE Chng in OI": ce.get("changeinOpenInterest", 0),
+                    "CE Volume": ce.get("totalTradedVolume", 0),
+                    "CE IV": ce.get("impliedVolatility", "-"),
+                    "CE LTP": ce.get("lastPrice", 0),
+                    "CE Chng": ce.get("change", 0),
+                    "CE Bid Qty": ce.get("bidQty", 0),
+                    "CE Bid": ce.get("bidprice", 0),
+                    "CE Ask": ce.get("askPrice", 0),
+                    "CE Ask Qty": ce.get("askQty", 0)
                 })
             if "PE" in entry:
+                pe = entry["PE"]
                 row.update({
-                    "PE OI": entry["PE"].get("openInterest", 0),
-                    "PE Chng": entry["PE"].get("change", 0),
+                    "PE OI": pe.get("openInterest", 0),
+                    "PE Chng in OI": pe.get("changeinOpenInterest", 0),
+                    "PE Volume": pe.get("totalTradedVolume", 0),
+                    "PE IV": pe.get("impliedVolatility", "-"),
+                    "PE LTP": pe.get("lastPrice", 0),
+                    "PE Chng": pe.get("change", 0),
+                    "PE Bid Qty": pe.get("bidQty", 0),
+                    "PE Bid": pe.get("bidprice", 0),
+                    "PE Ask": pe.get("askPrice", 0),
+                    "PE Ask Qty": pe.get("askQty", 0),
                 })
             rows.append(row)
         except Exception as ex:
             logging.error(f"Error processing entry: {entry} - {ex}")
 
     df = pd.DataFrame(rows)
-    return df, expiry_dates, None
+
+    # Compute intrinsic values using vectorized operations
+    df["CE Intrinsic Value"] = (df["Underlying Value"] - df["Strike Price"]).clip(lower=0)
+    df["PE Intrinsic Value"] = (df["Strike Price"] - df["Underlying Value"]).clip(lower=0)
+
+    # Order columns: calls, center, then puts, and computed columns at the end
+    ce_cols = sorted([col for col in df.columns if col.startswith("CE ")])
+    pe_cols = sorted([col for col in df.columns if col.startswith("PE ")])
+    center_cols = ["Expiry Date", "Strike Price", "Underlying Value"]
+    ordered_columns = ce_cols + center_cols + pe_cols + ["CE Intrinsic Value", "PE Intrinsic Value"]
+    df = df[ordered_columns]
+
+    # Determine ATM strike price using absolute difference
+    atm_strike = df["Strike Price"].iloc[
+        (df["Strike Price"] - underlying_value).abs().idxmin()] if not df.empty else None
+
+    return df, expiry_dates, atm_strike
 
 
 def display_time():
@@ -159,44 +196,134 @@ def display_time():
     st.write(f"Last Updated: {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
 
 
-# --- Streamlit UI ---
+def setup_autorefresh():
+    from streamlit_autorefresh import st_autorefresh
+    # Random interval between 1 and 3 minutes (60000 to 180000 ms)
+    refresh_interval_ms = random.randint(60000, 180000)
+    st_autorefresh(refresh_interval_ms, key="data_refresh")
+    st.cache_data.clear()
+
+
+# --- Streamlit Interface ---
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
 st.sidebar.title("📊 NSE Option Chain Analyzer")
-page = st.sidebar.radio("Navigation", ["Option Chain", "Analysis"])
+page = st.sidebar.radio("Navigation", ["Option Chain", "Buy/Sell Analysis", "Positional Bets"])
 
 symbol_list = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]
-selected_symbol = st.selectbox("Select Symbol", symbol_list)
+selected_symbol = st.selectbox("Select Symbol", symbol_list, key="symbol_common")
 
 if page == "Option Chain":
     st.title("📈 NSE Option Chain Analyzer")
+    auto_refresh = st.checkbox("Auto Refresh Data", value=False)
+    if auto_refresh:
+        setup_autorefresh()
     display_time()
 
-    option_chain_df, expiry_dates, _ = fetch_option_chain(selected_symbol)
+    option_chain_df, expiry_dates, atm_strike = fetch_option_chain(selected_symbol)
     if option_chain_df is not None:
         selected_expiry = st.selectbox("Select Expiry Date", expiry_dates)
         filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
-        st.dataframe(filtered_df, use_container_width=True)
-    else:
-        st.warning("⚠️ Unable to fetch data.")
+        # Ensure unique index and columns
+        filtered_df = filtered_df.reset_index(drop=True)
+        filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
 
-elif page == "Analysis":
-    st.title("📊 Market Trend Analysis")
+
+        def highlight_atm(row):
+            return ['background-color: yellow; color: black' if row['Strike Price'] == atm_strike else '' for _ in row]
+
+
+        st.subheader(f"📅 Option Chain for {selected_symbol} - {selected_expiry}")
+        if atm_strike:
+            styled_df = filtered_df.style.apply(highlight_atm, axis=1)
+            st.dataframe(styled_df, use_container_width=True)
+            st.markdown(f"**ATM Strike Price**: {atm_strike} (Highlighted in yellow)")
+        else:
+            st.dataframe(filtered_df, use_container_width=True)
+        st.markdown(f"**Current Underlying Value**: {filtered_df['Underlying Value'].iloc[0]:.2f}")
+    else:
+        st.warning("⚠️ Unable to fetch data. Please try again later.")
+
+elif page in ["Buy/Sell Analysis", "Positional Bets"]:
+    title = "📊 Market Trend Analysis" if page == "Buy/Sell Analysis" else "📊 Positional Bets Analysis"
+    st.title(title)
+    auto_refresh = st.checkbox("Auto Refresh Data", value=False)
+    if auto_refresh:
+        setup_autorefresh()
     display_time()
 
-    option_chain_df, expiry_dates, _ = fetch_option_chain(selected_symbol)
+    option_chain_df, expiry_dates, atm_strike = fetch_option_chain(selected_symbol)
     if option_chain_df is not None:
-        st.subheader("🔍 Price & OI Analysis")
-        total_call_oi = option_chain_df["CE OI"].sum()
-        total_put_oi = option_chain_df["PE OI"].sum()
+        if page == "Buy/Sell Analysis":
+            selected_expiry = st.selectbox("Select Expiry Date", expiry_dates, key="expiry_analysis")
+            filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
+        else:
+            filtered_df = option_chain_df
+        # Ensure unique index and columns
+        filtered_df = filtered_df.reset_index(drop=True)
+        filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
+
+        total_call_oi = filtered_df["CE OI"].sum()
+        total_put_oi = filtered_df["PE OI"].sum()
         pcr_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
 
         if pcr_ratio > 1.2:
-            trend = "BUY 🟢 (Bullish)"
+            pcr_trend = "BUY 🟢 (Bullish based on PCR)"
         elif pcr_ratio < 0.8:
-            trend = "SELL 🔴 (Bearish)"
+            pcr_trend = "SELL 🔴 (Bearish based on PCR)"
         else:
-            trend = "SIDEWAYS 🔄 (Neutral)"
+            pcr_trend = "SIDEWAYS 🔄 (Neutral based on PCR)"
 
-        st.markdown(f"**Put-Call Ratio (PCR):** {pcr_ratio:.2f} | **Trend:** {trend}")
+        st.markdown(f"""
+        - **Put-Call Ratio (PCR):** {pcr_ratio:.2f}
+        - **PCR Trend:** {pcr_trend}""")
+        st.caption("""
+        **Interpretation Guide**:
+        - PCR < 0.8: Indicates downside protection (Bearish)
+        - PCR > 1.2: Indicates upside potential (Bullish)
+        """)
+
+
+
+        # New Buy/Sell Logic Based on Change in Price and Change in OI for CE and PE
+        def interpret_signal(price_change, oi_change):
+            if price_change > 0 and oi_change > 0:
+                return ("Increase in Price & Increase in OI:\n"
+                        "Bullish")
+            elif price_change > 0 and oi_change < 0:
+                return ("Increase in Price & Decrease in OI:\n"
+                        "Short covering")
+            elif price_change < 0 and oi_change > 0:
+                return ("Decrease in Price & Increase in OI:\n"
+                        "Bearish")
+            elif price_change < 0 and oi_change < 0:
+                return ("Decrease in Price & Decrease in OI:\n"
+                        "Long Unwinding")
+            else:
+                return ("Price Remains Stable with Changes in OI:\n"
+                        "If price remains stable while OI changes significantly, it may indicate consolidation or indecision among traders. This can precede a breakout or breakdown depending on subsequent price movements.")
+
+
+        # Calculate aggregate changes for CE and PE
+        ce_price_change = filtered_df["CE Chng"].sum()
+        ce_oi_change = filtered_df["CE Chng in OI"].sum()
+        pe_price_change = filtered_df["PE Chng"].sum()
+        pe_oi_change = filtered_df["PE Chng in OI"].sum()
+
+        ce_signal = interpret_signal(ce_price_change, ce_oi_change)
+        pe_signal = interpret_signal(pe_price_change, pe_oi_change)
+
+        st.subheader("🔍 Price & OI Analysis")
+        st.markdown("**For Calls (CE):**")
+        st.info(f'CE {ce_signal}')
+        st.markdown("**For Puts (PE):**")
+        st.info(f'PE {pe_signal}')
+
+        conclusion_data = {
+            'Market Trend PCR': [pcr_trend],
+            'CE Signal': [ce_signal],
+            'PE Signal': [pe_signal]
+        }
+        st.subheader("📌 Conclusion")
+        st.table(pd.DataFrame(conclusion_data))
     else:
-        st.warning("⚠️ Unable to fetch data.")
+        st.warning("⚠️ Unable to fetch data. Please try again later.")
