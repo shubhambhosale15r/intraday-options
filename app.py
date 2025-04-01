@@ -10,12 +10,9 @@ import pytz
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 import logging
-import webdriver_manager
 import chromedriver_autoinstaller
 
-print("webdriver_manager version:", webdriver_manager.__version__)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -36,26 +33,16 @@ NSE_HOME_URL = "https://www.nseindia.com/"
 # Configuration flag for headless mode (set to False for local development)
 HEADLESS = True
 
-
 def get_random_user_agent():
     return random.choice(USER_AGENTS)
 
-
-# Local machine configuration:
-# Remove the following environment settings if you don't face permission issues.
-# os.environ['WDM_LOCAL'] = "1"
-# os.environ['WDM_SSL_VERIFY'] = "0"
-
-# Define a writable directory for the driver cache (optional change)
+# Create a writable directory for the ChromeDriver
 CHROMEDRIVER_ROOT = os.path.join(tempfile.gettempdir(), "chromedriver_autoinstaller")
 os.makedirs(CHROMEDRIVER_ROOT, exist_ok=True)
 os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = CHROMEDRIVER_ROOT
 
 # Now import the module
 import chromedriver_autoinstaller
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-
 
 def get_selenium_driver():
     chrome_options = Options()
@@ -67,8 +54,6 @@ def get_selenium_driver():
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-        # For local machines, you usually don't need to specify the binary location unless you use Chromium.
-        # chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
 
@@ -76,15 +61,14 @@ def get_selenium_driver():
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
 
-    # This will install the correct ChromeDriver version if not present
-    chromedriver_autoinstaller.install()
+    # Install ChromeDriver into a specific directory
+    chromedriver_autoinstaller.install(path=CHROMEDRIVER_ROOT)
 
     try:
         driver = webdriver.Chrome(options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
-
 
 def create_session():
     # Use Selenium to retrieve cookies from the NSE home page
@@ -115,7 +99,6 @@ def create_session():
     for cookie in selenium_cookies:
         session.cookies.set(cookie['name'], cookie['value'])
     return session
-
 
 @st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
@@ -187,7 +170,7 @@ def fetch_option_chain(symbol):
     df["PE Intrinsic Value"] = (df["Strike Price"] - df["Underlying Value"]).clip(lower=0)
 
     # Order columns: calls, center, then puts, and computed columns at the end
-    ce_cols = sorted([col for col in df.columns if col.startswith("CE ")])
+    ce_cols = sorted([col for col in df.columns if col.startswith("CE ")] )
     pe_cols = sorted([col for col in df.columns if col.startswith("PE ")])
     center_cols = ["Expiry Date", "Strike Price", "Underlying Value"]
     ordered_columns = ce_cols + center_cols + pe_cols + ["CE Intrinsic Value", "PE Intrinsic Value"]
@@ -198,21 +181,6 @@ def fetch_option_chain(symbol):
         (df["Strike Price"] - underlying_value).abs().idxmin()] if not df.empty else None
 
     return df, expiry_dates, atm_strike
-
-
-def display_time():
-    utc_time = datetime.now(pytz.utc)
-    ist_time = utc_time.astimezone(pytz.timezone("Asia/Kolkata"))
-    st.write(f"Last Updated: {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
-
-
-def setup_autorefresh():
-    from streamlit_autorefresh import st_autorefresh
-    # Random interval between 1 and 3 minutes (60000 to 180000 ms)
-    refresh_interval_ms = random.randint(60000, 180000)
-    st_autorefresh(refresh_interval_ms, key="data_refresh")
-    st.cache_data.clear()
-
 
 # --- Streamlit Interface ---
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
@@ -237,10 +205,8 @@ if page == "Option Chain":
         filtered_df = filtered_df.reset_index(drop=True)
         filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
 
-
         def highlight_atm(row):
             return ['background-color: yellow; color: black' if row['Strike Price'] == atm_strike else '' for _ in row]
-
 
         st.subheader(f"📅 Option Chain for {selected_symbol} - {selected_expiry}")
         if atm_strike:
@@ -249,91 +215,3 @@ if page == "Option Chain":
             st.markdown(f"**ATM Strike Price**: {atm_strike} (Highlighted in yellow)")
         else:
             st.dataframe(filtered_df, use_container_width=True)
-        st.markdown(f"**Current Underlying Value**: {filtered_df['Underlying Value'].iloc[0]:.2f}")
-    else:
-        st.warning("⚠️ Unable to fetch data. Please try again later.")
-
-elif page in ["Buy/Sell Analysis", "Positional Bets"]:
-    title = "📊 Market Trend Analysis" if page == "Buy/Sell Analysis" else "📊 Positional Bets Analysis"
-    st.title(title)
-    auto_refresh = st.checkbox("Auto Refresh Data", value=False)
-    if auto_refresh:
-        setup_autorefresh()
-    display_time()
-
-    option_chain_df, expiry_dates, atm_strike = fetch_option_chain(selected_symbol)
-    if option_chain_df is not None:
-        if page == "Buy/Sell Analysis":
-            selected_expiry = st.selectbox("Select Expiry Date", expiry_dates, key="expiry_analysis")
-            filtered_df = option_chain_df[option_chain_df["Expiry Date"] == selected_expiry]
-        else:
-            filtered_df = option_chain_df
-        # Ensure unique index and columns
-        filtered_df = filtered_df.reset_index(drop=True)
-        filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
-
-        total_call_oi = filtered_df["CE OI"].sum()
-        total_put_oi = filtered_df["PE OI"].sum()
-        pcr_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
-
-        if pcr_ratio > 1.2:
-            pcr_trend = "BUY 🟢 (Bullish based on PCR)"
-        elif pcr_ratio < 0.8:
-            pcr_trend = "SELL 🔴 (Bearish based on PCR)"
-        else:
-            pcr_trend = "SIDEWAYS 🔄 (Neutral based on PCR)"
-
-        st.markdown(f"""
-        - **Put-Call Ratio (PCR):** {pcr_ratio:.2f}
-        - **PCR Trend:** {pcr_trend}""")
-        st.caption("""
-        **Interpretation Guide**:
-        - PCR < 0.8: Indicates downside protection (Bearish)
-        - PCR > 1.2: Indicates upside potential (Bullish)
-        """)
-
-
-
-        # New Buy/Sell Logic Based on Change in Price and Change in OI for CE and PE
-        def interpret_signal(price_change, oi_change):
-            if price_change > 0 and oi_change > 0:
-                return ("Increase in Price & Increase in OI:\n"
-                        "Bullish")
-            elif price_change > 0 and oi_change < 0:
-                return ("Increase in Price & Decrease in OI:\n"
-                        "Short covering")
-            elif price_change < 0 and oi_change > 0:
-                return ("Decrease in Price & Increase in OI:\n"
-                        "Bearish")
-            elif price_change < 0 and oi_change < 0:
-                return ("Decrease in Price & Decrease in OI:\n"
-                        "Long Unwinding")
-            else:
-                return ("Price Remains Stable with Changes in OI:\n"
-                        "If price remains stable while OI changes significantly, it may indicate consolidation or indecision among traders. This can precede a breakout or breakdown depending on subsequent price movements.")
-
-
-        # Calculate aggregate changes for CE and PE
-        ce_price_change = filtered_df["CE Chng"].sum()
-        ce_oi_change = filtered_df["CE Chng in OI"].sum()
-        pe_price_change = filtered_df["PE Chng"].sum()
-        pe_oi_change = filtered_df["PE Chng in OI"].sum()
-
-        ce_signal = interpret_signal(ce_price_change, ce_oi_change)
-        pe_signal = interpret_signal(pe_price_change, pe_oi_change)
-
-        st.subheader("🔍 Price & OI Analysis")
-        st.markdown("**For Calls (CE):**")
-        st.info(f'CE {ce_signal}')
-        st.markdown("**For Puts (PE):**")
-        st.info(f'PE {pe_signal}')
-
-        conclusion_data = {
-            'Market Trend PCR': [pcr_trend],
-            'CE Signal': [ce_signal],
-            'PE Signal': [pe_signal]
-        }
-        st.subheader("📌 Conclusion")
-        st.table(pd.DataFrame(conclusion_data))
-    else:
-        st.warning("⚠️ Unable to fetch data. Please try again later.")
