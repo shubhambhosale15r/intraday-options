@@ -288,16 +288,16 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         def interpret_signal(price_change, oi_change):
             if price_change > 0 and oi_change > 0:
                 return ("Increase in Price & Increase in OI:\n"
-                        "Bullish")
+                        "Bullish 🟢")
             elif price_change > 0 and oi_change < 0:
                 return ("Increase in Price & Decrease in OI:\n"
-                        "Short covering")
+                        "Short covering 🔵")
             elif price_change < 0 and oi_change > 0:
                 return ("Decrease in Price & Increase in OI:\n"
-                        "Bearish")
+                        "Bearish 🔴")
             elif price_change < 0 and oi_change < 0:
                 return ("Decrease in Price & Decrease in OI:\n"
-                        "Long Unwinding")
+                        "Long Unwinding 🟠")
             else:
                 return ("Price Remains Stable with Changes in OI:\n"
                         "If price remains stable while OI changes significantly, it may indicate consolidation or indecision among traders. This can precede a breakout or breakdown depending on subsequent price movements.")
