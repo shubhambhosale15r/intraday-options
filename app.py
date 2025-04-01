@@ -36,8 +36,10 @@ NSE_HOME_URL = "https://www.nseindia.com/"
 # Configuration flag for headless mode (set to False for local development)
 HEADLESS = True
 
+
 def get_random_user_agent():
     return random.choice(USER_AGENTS)
+
 
 # Local machine configuration:
 # Remove the following environment settings if you don't face permission issues.
@@ -54,13 +56,14 @@ import chromedriver_autoinstaller
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+
 def get_selenium_driver():
     chrome_options = Options()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    
+
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
@@ -68,19 +71,20 @@ def get_selenium_driver():
         # chrome_options.binary_location = "/usr/bin/chromium"
     else:
         chrome_options.add_argument("start-maximized")
-    
+
     # Set a random user agent
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
-    
+
     # This will install the correct ChromeDriver version if not present
     chromedriver_autoinstaller.install()
-    
+
     try:
         driver = webdriver.Chrome(options=chrome_options)
         return driver
     except Exception as e:
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
+
 
 def create_session():
     # Use Selenium to retrieve cookies from the NSE home page
@@ -111,6 +115,7 @@ def create_session():
     for cookie in selenium_cookies:
         session.cookies.set(cookie['name'], cookie['value'])
     return session
+
 
 @st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
@@ -194,10 +199,12 @@ def fetch_option_chain(symbol):
 
     return df, expiry_dates, atm_strike
 
+
 def display_time():
     utc_time = datetime.now(pytz.utc)
     ist_time = utc_time.astimezone(pytz.timezone("Asia/Kolkata"))
     st.write(f"Last Updated: {ist_time.strftime('%Y-%m-%d %H:%M:%S')} IST")
+
 
 def setup_autorefresh():
     from streamlit_autorefresh import st_autorefresh
@@ -205,6 +212,7 @@ def setup_autorefresh():
     refresh_interval_ms = random.randint(60000, 180000)
     st_autorefresh(refresh_interval_ms, key="data_refresh")
     st.cache_data.clear()
+
 
 # --- Streamlit Interface ---
 st.set_page_config(page_title="NSE Option Chain", layout="wide")
@@ -229,8 +237,10 @@ if page == "Option Chain":
         filtered_df = filtered_df.reset_index(drop=True)
         filtered_df = filtered_df.loc[:, ~filtered_df.columns.duplicated()]
 
+
         def highlight_atm(row):
             return ['background-color: yellow; color: black' if row['Strike Price'] == atm_strike else '' for _ in row]
+
 
         st.subheader(f"📅 Option Chain for {selected_symbol} - {selected_expiry}")
         if atm_strike:
@@ -282,30 +292,46 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         - PCR > 1.2: Indicates upside potential (Bullish)
         """)
 
-        # Select ITM calls and puts relative to the ATM strike
-        itm_calls = filtered_df[filtered_df["Strike Price"] < atm_strike].nlargest(5, "Strike Price")
-        itm_puts = filtered_df[filtered_df["Strike Price"] > atm_strike].nsmallest(5, "Strike Price")
 
-        if not itm_calls.empty and not itm_puts.empty:
-            avg_ce_ltp = itm_calls["CE LTP"].mean()
-            avg_ce_intrinsic = itm_calls["CE Intrinsic Value"].mean()
-            avg_pe_ltp = itm_puts["PE LTP"].mean()
-            avg_pe_intrinsic = itm_puts["PE Intrinsic Value"].mean()
 
-            if avg_ce_ltp > avg_ce_intrinsic and avg_pe_ltp < avg_pe_intrinsic:
-                intrinsic_strategy = "BUY 🟢 (Call premium above intrinsic & Put premium below intrinsic)"
-            elif avg_pe_ltp > avg_pe_intrinsic and avg_ce_ltp < avg_ce_intrinsic:
-                intrinsic_strategy = "SELL 🔴 (Put premium above intrinsic & Call premium below intrinsic)"
+        # New Buy/Sell Logic Based on Change in Price and Change in OI for CE and PE
+        def interpret_signal(price_change, oi_change):
+            if price_change > 0 and oi_change > 0:
+                return ("Increase in Price & Increase in OI:\n"
+                        "Bullish")
+            elif price_change > 0 and oi_change < 0:
+                return ("Increase in Price & Decrease in OI:\n"
+                        "Short covering")
+            elif price_change < 0 and oi_change > 0:
+                return ("Decrease in Price & Increase in OI:\n"
+                        "Bearish")
+            elif price_change < 0 and oi_change < 0:
+                return ("Decrease in Price & Decrease in OI:\n"
+                        "Long Unwinding")
             else:
-                intrinsic_strategy = "SIDEWAYS 🔄 (No clear intrinsic bias)"
-        else:
-            intrinsic_strategy = "Data insufficient for intrinsic strategy"
+                return ("Price Remains Stable with Changes in OI:\n"
+                        "If price remains stable while OI changes significantly, it may indicate consolidation or indecision among traders. This can precede a breakout or breakdown depending on subsequent price movements.")
 
-        st.markdown(f"- **Intrinsic Strategy:** {intrinsic_strategy}")
+
+        # Calculate aggregate changes for CE and PE
+        ce_price_change = filtered_df["CE Chng"].sum()
+        ce_oi_change = filtered_df["CE Chng in OI"].sum()
+        pe_price_change = filtered_df["PE Chng"].sum()
+        pe_oi_change = filtered_df["PE Chng in OI"].sum()
+
+        ce_signal = interpret_signal(ce_price_change, ce_oi_change)
+        pe_signal = interpret_signal(pe_price_change, pe_oi_change)
+
+        st.subheader("🔍 Price & OI Analysis")
+        st.markdown("**For Calls (CE):**")
+        st.info(f'CE {ce_signal}')
+        st.markdown("**For Puts (PE):**")
+        st.info(f'PE {pe_signal}')
 
         conclusion_data = {
             'Market Trend PCR': [pcr_trend],
-            'Intrinsic Strategy': [intrinsic_strategy]
+            'CE Signal': [ce_signal],
+            'PE Signal': [pe_signal]
         }
         st.subheader("📌 Conclusion")
         st.table(pd.DataFrame(conclusion_data))
