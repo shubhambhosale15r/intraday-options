@@ -5,3 +5,4 @@ selenium
 webdriver-manager
 pytz
 chromedriver-autoinstaller
+streamlit-autorefresh
