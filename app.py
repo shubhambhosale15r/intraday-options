@@ -318,10 +318,27 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         st.markdown("**For Puts (PE):**")
         st.info(f'PE {pe_signal}')
 
+        # New Market Condition Logic based on Bid and Ask Prices
+        total_ce_bid_prices = filtered_df["CE Bid"].sum()
+        total_pe_bid_prices = filtered_df["PE Bid"].sum()
+        total_ce_ask_prices = filtered_df["CE Ask"].sum()
+        total_pe_ask_prices = filtered_df["PE Ask"].sum()
+
+        if total_ce_bid_prices > total_pe_bid_prices and total_ce_ask_prices > total_pe_ask_prices:
+            market_condition = "BUY 🟢"
+        elif total_pe_bid_prices > total_ce_bid_prices and total_pe_ask_prices > total_ce_ask_prices:
+            market_condition = "SELL 🔴"
+        else:
+            market_condition = "SIDEWAYS 🔄"
+
+        st.subheader("📌 Market Condition Based on Bid and Ask Prices")
+        st.markdown(f"**Bid-Ask Signal:** {market_condition}")
+
         conclusion_data = {
             'Market Trend PCR': [pcr_trend],
             'CE Signal': [ce_signal],
-            'PE Signal': [pe_signal]
+            'PE Signal': [pe_signal],
+            'Bid-Ask Signal': [market_condition]
         }
         st.subheader("📌 Conclusion")
         st.table(pd.DataFrame(conclusion_data))
