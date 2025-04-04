@@ -331,14 +331,14 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         else:
             market_condition = "SIDEWAYS 🔄"
 
-        st.subheader("📌 Market Condition Based on Bid and Ask Prices")
-        st.markdown(f"**Bid-Ask Signal:** {market_condition}")
+        # st.subheader("📌 Market Condition Based on Bid and Ask Prices")
+        # st.markdown(f"**Bid-Ask Signal:** {market_condition}")
 
         conclusion_data = {
             'Market Trend PCR': [pcr_trend],
             'CE Signal': [ce_signal],
             'PE Signal': [pe_signal],
-            'Bid-Ask Signal': [market_condition]
+            # 'Bid-Ask Signal': [market_condition]
         }
         st.subheader("📌 Conclusion")
         st.table(pd.DataFrame(conclusion_data))
