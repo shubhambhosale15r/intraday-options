@@ -314,9 +314,9 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
 
         st.subheader("🔍 Price & OI Analysis")
         st.markdown("**For Calls (CE):**")
-        st.info(f'CE {ce_signal}    CE Price Change{ce_price_change}    CE OI Change{ce_oi_change}')
+        st.info(f'CE {ce_signal}    CE Price Change: {ce_price_change}    CE OI Change: {ce_oi_change}')
         st.markdown("**For Puts (PE):**")
-        st.info(f'PE {pe_signal}    PE Price Change{pe_price_change}    PE OI Change{pe_oi_change}')
+        st.info(f'PE {pe_signal}    PE Price Change: {pe_price_change}    PE OI Change: {pe_oi_change}')
 
         # New Market Condition Logic based on Bid and Ask Prices
         total_ce_bid_prices = filtered_df["CE Bid"].sum()
@@ -333,12 +333,19 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
 
         # st.subheader("📌 Market Condition Based on Bid and Ask Prices")
         # st.markdown(f"**Bid-Ask Signal:** {market_condition}")
-
+        pure_price_signal=''
+        if ce_price_change > pe_price_change and ce_price_change > 0:
+            pure_price_signal='Bullish market'
+        elif pe_price_change > ce_price_change and pe_price_change > 0:
+            pure_price_signal='Bearish Market'
+        else:
+            pure_price_signal='Sideways'
         conclusion_data = {
             'Market Trend PCR': [pcr_trend],
             'CE Signal': [ce_signal],
             'PE Signal': [pe_signal],
             # 'Bid-Ask Signal': [market_condition]
+            'Pure Price Signal' : [pure_price_signal]
         }
         st.subheader("📌 Conclusion")
         st.table(pd.DataFrame(conclusion_data))
