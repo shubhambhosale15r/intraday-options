@@ -314,9 +314,9 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
 
         st.subheader("🔍 Price & OI Analysis")
         st.markdown("**For Calls (CE):**")
-        st.info(f'CE {ce_signal}')
+        st.info(f'CE {ce_signal}    CE Price Change{ce_price_change}    CE OI Change{ce_oi_change}')
         st.markdown("**For Puts (PE):**")
-        st.info(f'PE {pe_signal}')
+        st.info(f'PE {pe_signal}    PE Price Change{pe_price_change}    PE OI Change{pe_oi_change}')
 
         # New Market Condition Logic based on Bid and Ask Prices
         total_ce_bid_prices = filtered_df["CE Bid"].sum()
