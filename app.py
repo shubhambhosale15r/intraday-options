@@ -344,7 +344,7 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
             'Market Trend PCR': [pcr_trend],
             'CE Signal': [ce_signal],
             'PE Signal': [pe_signal],
-            'Bid-Ask Signal': [market_condition]
+            'Bid-Ask Signal': [market_condition],
             'Pure Price Signal' : [pure_price_signal]
         }
         st.subheader("📌 Conclusion")
