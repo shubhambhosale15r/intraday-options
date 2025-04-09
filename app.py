@@ -331,8 +331,8 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         else:
             market_condition = "SIDEWAYS 🔄"
 
-        # st.subheader("📌 Market Condition Based on Bid and Ask Prices")
-        # st.markdown(f"**Bid-Ask Signal:** {market_condition}")
+        st.subheader("📌 Market Condition Based on Bid and Ask Prices")
+        st.markdown(f"**Bid-Ask Signal:** {market_condition}")
         pure_price_signal=''
         if ce_price_change > pe_price_change and ce_price_change > 0:
             pure_price_signal='Bullish market'
@@ -344,7 +344,7 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
             'Market Trend PCR': [pcr_trend],
             'CE Signal': [ce_signal],
             'PE Signal': [pe_signal],
-            # 'Bid-Ask Signal': [market_condition]
+            'Bid-Ask Signal': [market_condition]
             'Pure Price Signal' : [pure_price_signal]
         }
         st.subheader("📌 Conclusion")
