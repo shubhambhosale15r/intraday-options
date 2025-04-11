@@ -319,19 +319,29 @@ elif page in ["Buy/Sell Analysis", "Positional Bets"]:
         st.info(f'PE {pe_signal}    PE Price Change: {pe_price_change}    PE OI Change: {pe_oi_change}')
 
         # New Market Condition Logic based on Bid and Ask Prices
-        total_ce_bid_prices = filtered_df["CE Bid"].sum()
-        total_pe_bid_prices = filtered_df["PE Bid"].sum()
-        total_ce_ask_prices = filtered_df["CE Ask"].sum()
-        total_pe_ask_prices = filtered_df["PE Ask"].sum()
 
-        if total_ce_bid_prices > total_pe_bid_prices and total_ce_ask_prices > total_pe_ask_prices:
+        total_ce_volume = filtered_df["CE Volume"].sum()
+        total_pe_volume = filtered_df["PE Volume"].sum()
+        
+        # Calculate weighted bids/asks
+        ce_weighted_bid = (filtered_df["CE Bid"] * filtered_df["CE Volume"]).sum() / total_ce_volume
+        pe_weighted_bid = (filtered_df["PE Bid"] * filtered_df["PE Volume"]).sum() / total_pe_volume
+        
+        ce_weighted_ask = (filtered_df["CE Ask"] * filtered_df["CE Volume"]).sum() / total_ce_volume
+        pe_weighted_ask = (filtered_df["PE Ask"] * filtered_df["PE Volume"]).sum() / total_pe_volume
+        
+        # Now using these weighted values in market condition logic
+
+        if ce_weighted_bid > pe_weighted_bid and ce_weighted_ask > pe_weighted_ask:
             market_condition = "BUY 🟢"
-        elif total_pe_bid_prices > total_ce_bid_prices and total_pe_ask_prices > total_ce_ask_prices:
+        elif pe_weighted_bid > ce_weighted_bid and pe_weighted_ask > ce_weighted_ask:
             market_condition = "SELL 🔴"
         else:
             market_condition = "SIDEWAYS 🔄"
 
         st.subheader("📌 Market Condition Based on Bid and Ask Prices")
+        st.markdown(f"CE Weighted Bid: {ce_weighted_bid}    CE Weighted Ask: {ce_weighted_ask}")
+        st.markdown(f"PE Weighted Bid: {pe_weighted_bid}    PE Weighted Ask: {pe_weighted_ask}")
         st.markdown(f"**Bid-Ask Signal:** {market_condition}")
         pure_price_signal=''
         if ce_price_change > pe_price_change and ce_price_change > 0:
