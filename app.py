@@ -2,7 +2,6 @@ import os
 import tempfile
 import time
 import random
-import requests
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -10,12 +9,13 @@ import pytz
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
-import webdriver_manager
-import chromedriver_autoinstaller
+import json
 
-print("webdriver_manager version:", webdriver_manager.__version__)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -26,26 +26,12 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
 ]
 
-# Optional: List of proxies (format: "http://ip:port")
-PROXIES = []
-
-# NSE API URL and Home URL
-NSE_API_URL = "https://www.nseindia.com/api/option-chain-indices?symbol={}"
-NSE_HOME_URL = "https://www.nseindia.com/"
-
-# Configuration flag for headless mode
 HEADLESS = True
-
+NSE_HOME_URL = "https://www.nseindia.com/"
+NSE_OC_URL = "https://www.nseindia.com/option-chain"
 
 def get_random_user_agent():
     return random.choice(USER_AGENTS)
-
-
-# Set up ChromeDriver installation directory
-CHROMEDRIVER_ROOT = os.path.join(tempfile.gettempdir(), "chromedriver_autoinstaller")
-os.makedirs(CHROMEDRIVER_ROOT, exist_ok=True)
-os.environ["CHROMEDRIVER_AUTOINSTALLER_ROOT"] = CHROMEDRIVER_ROOT
-
 
 def get_selenium_driver():
     chrome_options = Options()
@@ -53,68 +39,34 @@ def get_selenium_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-
     if HEADLESS:
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("window-size=1920,1080")
-
     ua = get_random_user_agent()
     chrome_options.add_argument(f"user-agent={ua}")
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
 
-    # Install ChromeDriver & ensure correct version
-    chrome_version = chromedriver_autoinstaller.get_chrome_version().split('.')[0]
-    chromedriver_path = chromedriver_autoinstaller.install(path=CHROMEDRIVER_ROOT)
-
-    if not chromedriver_path:
-        raise RuntimeError("Failed to install ChromeDriver.")
-
-    service = Service(chromedriver_path)
-    try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        return driver
-    except Exception as e:
-        raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
-
-
+@st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
     driver = get_selenium_driver()
-
-    # Load NSE Option Chain page (generic page to initiate cookies/session)
-    driver.get("https://www.nseindia.com/option-chain")
-    time.sleep(random.uniform(5, 7))  # Wait for cookies and scripts to load
-
-    # Enable performance logging to capture API calls
-    logs = driver.get_log("performance")
-    found_data = None
-
-    # Trigger the actual data request (manually navigate to expected URL)
-    api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
-    driver.get(api_url)
-    time.sleep(random.uniform(3, 5))
-
-    # Retry logs to find network response
-    logs = driver.get_log("performance")
-    for entry in logs:
-        try:
-            msg = json.loads(entry["message"])["message"]
-            if (
-                msg["method"] == "Network.responseReceived"
-                and "option-chain-indices?symbol=" in msg["params"]["response"]["url"]
-            ):
-                request_id = msg["params"]["requestId"]
-                resp = driver.execute_cdp_cmd("Network.getResponseBody", {"requestId": request_id})
-                found_data = json.loads(resp["body"])
-                break
-        except Exception as e:
-            continue
+    try:
+        driver.get(NSE_HOME_URL)
+        time.sleep(3)
+        driver.get(f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}")
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "pre")))
+        pre = driver.find_element(By.TAG_NAME, "pre").text
+        data = json.loads(pre)
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        logging.error(f"Selenium fetch error: {e}")
+        driver.quit()
+        return None, None, None
 
     driver.quit()
 
-    if not found_data:
-        st.error("Error: Failed to extract option chain data.")
-        return None, None, None
-
-    records = found_data.get("records", {})
+    records = data.get("records", {})
     option_chain = records.get("data", [])
     expiry_dates = records.get("expiryDates", [])
     underlying_value = records.get("underlyingValue", None)
@@ -169,12 +121,14 @@ def fetch_option_chain(symbol):
     df["CE Intrinsic Value"] = (df["Underlying Value"] - df["Strike Price"]).clip(lower=0)
     df["PE Intrinsic Value"] = (df["Strike Price"] - df["Underlying Value"]).clip(lower=0)
 
+    # Organize columns
     ce_cols = sorted([col for col in df.columns if col.startswith("CE ")])
     pe_cols = sorted([col for col in df.columns if col.startswith("PE ")])
     center_cols = ["Expiry Date", "Strike Price", "Underlying Value"]
     ordered_columns = ce_cols + center_cols + pe_cols + ["CE Intrinsic Value", "PE Intrinsic Value"]
     df = df[ordered_columns]
 
+    # ATM Strike
     atm_strike = df["Strike Price"].iloc[
         (df["Strike Price"] - underlying_value).abs().idxmin()] if not df.empty else None
 
