@@ -38,6 +38,11 @@ def human_like_delay():
     time.sleep(random.uniform(1.5, 4.5))  # Random delay between 1.5 and 4.5 seconds
 
 
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
 def get_selenium_driver():
     # Set Chrome options for headless mode
     chrome_options = Options()
@@ -48,15 +53,19 @@ def get_selenium_driver():
     chrome_options.add_argument("--remote-debugging-port=9222")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
-    # Force ChromeDriver version 114.0.5735.90 to match your Chrome version
-    driver_path = ChromeDriverManager(version="114.0.5735.90").install()  # Specify ChromeDriver version 114
+    # Install ChromeDriver with version 114.0.5735.90
+    driver_path = ChromeDriverManager().install()  # This installs the latest version of ChromeDriver.
+    
+    # You should explicitly ensure compatibility if needed for version 114 like this:
+    driver_path = ChromeDriverManager(version="114.0.5735.90").install()  # Correct version installation
     
     service = Service(driver_path)  # Create a Service with the correct driver
-
+    
     # Create the WebDriver with the correct service and options
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
     return driver
+
 
 
 
