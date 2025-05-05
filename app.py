@@ -40,19 +40,21 @@ def human_like_delay():
 def get_selenium_driver():
     # Setting up Chrome options for headless mode
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Ensure headless mode is enabled
+    chrome_options.add_argument("--headless")  # Run Chrome in headless mode
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--remote-debugging-port=9222")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument(f"user-agent={get_random_user_agent()}")  # Optional: Set user-agent
+    
+    # Automatically handle ChromeDriver version using webdriver-manager
+    driver_path = ChromeDriverManager().install()  # This fetches the correct version of ChromeDriver
+    service = Service(driver_path)  # Create a Service with the correct driver
 
-    # Use ChromeDriverManager to ensure the correct version of ChromeDriver
-    service = Service(ChromeDriverManager().install())  # This will ensure the correct version is downloaded
+    # Create the WebDriver with the right service and options
     driver = webdriver.Chrome(service=service, options=chrome_options)
+    
     return driver
-
 
 def fetch_option_chain(symbol):
     driver = get_selenium_driver()
