@@ -76,58 +76,51 @@ def get_selenium_driver():
         raise RuntimeError(f"Failed to initialize WebDriver: {str(e)}")
 
 
-def create_session():
-    # Use Selenium to retrieve cookies from the NSE home page
+def fetch_option_chain(symbol):
     driver = get_selenium_driver()
-    driver.get(NSE_HOME_URL)
-    # Instead of fixed sleep, consider explicit waits if needed
-    time.sleep(random.uniform(4, 6))
-    selenium_cookies = driver.get_cookies()
+
+    # Load NSE Option Chain page (generic page to initiate cookies/session)
+    driver.get("https://www.nseindia.com/option-chain")
+    time.sleep(random.uniform(5, 7))  # Wait for cookies and scripts to load
+
+    # Enable performance logging to capture API calls
+    logs = driver.get_log("performance")
+    found_data = None
+
+    # Trigger the actual data request (manually navigate to expected URL)
+    api_url = f"https://www.nseindia.com/api/option-chain-indices?symbol={symbol}"
+    driver.get(api_url)
+    time.sleep(random.uniform(3, 5))
+
+    # Retry logs to find network response
+    logs = driver.get_log("performance")
+    for entry in logs:
+        try:
+            msg = json.loads(entry["message"])["message"]
+            if (
+                msg["method"] == "Network.responseReceived"
+                and "option-chain-indices?symbol=" in msg["params"]["response"]["url"]
+            ):
+                request_id = msg["params"]["requestId"]
+                resp = driver.execute_cdp_cmd("Network.getResponseBody", {"requestId": request_id})
+                found_data = json.loads(resp["body"])
+                break
+        except Exception as e:
+            continue
+
     driver.quit()
 
-    session = requests.Session()
-    # Rotate the user agent in session headers
-    ua = get_random_user_agent()
-    session.headers.update({
-        "User-Agent": ua,
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nseindia.com/option-chain",
-    })
-
-    # Optional: Set a random proxy from the list if available
-    if PROXIES:
-        proxy = random.choice(PROXIES)
-        session.proxies.update({"http": proxy, "https": proxy})
-        logging.info(f"Using proxy: {proxy}")
-
-    # Transfer cookies from Selenium to the requests session
-    for cookie in selenium_cookies:
-        session.cookies.set(cookie['name'], cookie['value'])
-    return session
-
-
-@st.cache_data(ttl=180)
-def fetch_option_chain(symbol):
-    session = create_session()
-    url = NSE_API_URL.format(symbol)
-    try:
-        response = session.get(url, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        logging.error(f"Error fetching data from {url}: {e}")
+    if not found_data:
+        st.error("Error: Failed to extract option chain data.")
         return None, None, None
 
-    records = data.get("records", {})
+    records = found_data.get("records", {})
     option_chain = records.get("data", [])
     expiry_dates = records.get("expiryDates", [])
     underlying_value = records.get("underlyingValue", None)
 
     if underlying_value is None:
         st.error("Data format error: Missing underlying value.")
-        logging.error("Missing underlying value in API response.")
         return None, None, None
 
     rows = []
@@ -172,22 +165,21 @@ def fetch_option_chain(symbol):
 
     df = pd.DataFrame(rows)
 
-    # Compute intrinsic values using vectorized operations
+    # Compute intrinsic values
     df["CE Intrinsic Value"] = (df["Underlying Value"] - df["Strike Price"]).clip(lower=0)
     df["PE Intrinsic Value"] = (df["Strike Price"] - df["Underlying Value"]).clip(lower=0)
 
-    # Order columns: calls, center, then puts, and computed columns at the end
     ce_cols = sorted([col for col in df.columns if col.startswith("CE ")])
     pe_cols = sorted([col for col in df.columns if col.startswith("PE ")])
     center_cols = ["Expiry Date", "Strike Price", "Underlying Value"]
     ordered_columns = ce_cols + center_cols + pe_cols + ["CE Intrinsic Value", "PE Intrinsic Value"]
     df = df[ordered_columns]
 
-    # Determine ATM strike price using absolute difference
     atm_strike = df["Strike Price"].iloc[
         (df["Strike Price"] - underlying_value).abs().idxmin()] if not df.empty else None
 
     return df, expiry_dates, atm_strike
+
 
 
 def display_time():
