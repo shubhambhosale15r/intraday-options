@@ -37,6 +37,11 @@ def get_random_user_agent():
 def human_like_delay():
     time.sleep(random.uniform(1.5, 4.5))  # Random delay between 1.5 and 4.5 seconds
 
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
 def get_selenium_driver():
     # Set Chrome options for headless mode
     chrome_options = Options()
@@ -48,7 +53,8 @@ def get_selenium_driver():
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
     # Force a specific version of ChromeDriver that matches Chromium 120
-    driver_path = ChromeDriverManager(version="120.0.6099.224").install()  # Specify the version
+    driver_path = ChromeDriverManager().install()  # Install ChromeDriver automatically
+    
     service = Service(driver_path)  # Create a Service with the correct driver
 
     # Create the WebDriver with the correct service and options
