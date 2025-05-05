@@ -35,18 +35,18 @@ def get_random_user_agent():
 
 def get_selenium_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--headless")  # more compatible
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    if HEADLESS:
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("window-size=1920,1080")
-    ua = get_random_user_agent()
-    chrome_options.add_argument(f"user-agent={ua}")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument(f"user-agent={get_random_user_agent()}")
+
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
+
 
 @st.cache_data(ttl=180)
 def fetch_option_chain(symbol):
