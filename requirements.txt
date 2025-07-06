@@ -1,8 +1,6 @@
-streamlit
-pandas
-requests
-selenium
-webdriver-manager
-pytz
-chromedriver-autoinstaller
-streamlit-autorefresh
+streamlit>=1.22.0
+pandas>=1.3.0
+numpy>=1.21.0
+pytz>=2022.1
+fyers-apiv3>=1.0.0
+streamlit-autorefresh>=0.3.0
