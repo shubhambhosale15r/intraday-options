@@ -736,7 +736,7 @@ def main():
     st.subheader("📈 Live Trading")
     if chain:
         result, atm = format_and_show(chain, f"Current Expiry: {curr_date}", ltp, show_signals=True)
-        signal = result[signal] if result else None
+        signal = result["signal"] if result else None
         if signal and ltp:
             timestamp = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.signal_history.append({
