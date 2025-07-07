@@ -177,28 +177,10 @@ def compute_signals(merged_df, atm_strike, ltp):
             signal = "SIDEWAYS"
 
         # Return all the details
-        return (
-            "signal": signal,
-            "atm_strike": atm_strike,
-            "low_strike": low_strike,
-            "low_pcr": low_pcr,
-            "low_dist": dist_low,
-            "high_strike": high_strike,
-            "high_pcr": high_pcr,
-            "high_dist": dist_high
-        )
+        return signal
     except Exception as e:
         logging.error(f"Error in compute_signals: {str(e)}", exc_info=True)
-        return (
-            "signal": "SIDEWAYS",
-            "atm_strike": atm_strike,
-            "low_strike": None,
-            "low_pcr": None,
-            "low_dist": None,
-            "high_strike": None,
-            "high_pcr": None,
-            "high_dist": None
-        )
+        return "Compute signal exception raised"
 
 # --- Strike Selection ---
 def select_strikes_atm_half_price(chain, atm_strike):
@@ -569,7 +551,7 @@ def format_and_show(chain, title, ltp, show_signals=False):
     st.dataframe(styled)
     st.caption(f"ATM Strike: {atm} | Underlying LTP: {ltp}")
     if show_signals and atm is not None:
-        return result[signal], atm
+        return result, atm
     return None, atm
 
 @handle_errors
@@ -738,7 +720,7 @@ def main():
     st.subheader("📈 Live Trading")
     if chain:
         result, atm = format_and_show(chain, f"Current Expiry: {curr_date}", ltp, show_signals=True)
-        signal = result["signal"] if result else None
+        signal = result if result else None
         if signal and ltp:
             timestamp = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.signal_history.append({
