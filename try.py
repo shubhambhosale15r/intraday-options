@@ -170,9 +170,9 @@ def compute_signals(merged_df, atm_strike, ltp):
 
         # Determine signal
         if dist_low < dist_high:
-            signal = "BEARISH"
+            signal = "SELL"
         elif dist_high < dist_low:
-            signal = "BULLISH"
+            signal = "BUY"
         else:
             signal = "SIDEWAYS"
 
