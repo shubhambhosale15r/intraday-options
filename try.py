@@ -569,7 +569,7 @@ def format_and_show(chain, title, ltp, show_signals=False):
     st.dataframe(styled)
     st.caption(f"ATM Strike: {atm} | Underlying LTP: {ltp}")
     if show_signals and atm is not None:
-        return result, atm
+        return result[signal], atm
     return None, atm
 
 @handle_errors
