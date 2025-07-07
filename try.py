@@ -177,7 +177,7 @@ def compute_signals(merged_df, atm_strike, ltp):
             signal = "SIDEWAYS"
 
         # Return all the details
-        return {
+        return (
             "signal": signal,
             "atm_strike": atm_strike,
             "low_strike": low_strike,
@@ -186,10 +186,10 @@ def compute_signals(merged_df, atm_strike, ltp):
             "high_strike": high_strike,
             "high_pcr": high_pcr,
             "high_dist": dist_high
-        }
+        )
     except Exception as e:
         logging.error(f"Error in compute_signals: {str(e)}", exc_info=True)
-        return {
+        return (
             "signal": "SIDEWAYS",
             "atm_strike": atm_strike,
             "low_strike": None,
@@ -198,7 +198,7 @@ def compute_signals(merged_df, atm_strike, ltp):
             "high_strike": None,
             "high_pcr": None,
             "high_dist": None
-        }
+        )
 
 # --- Strike Selection ---
 def select_strikes_atm_half_price(chain, atm_strike):
