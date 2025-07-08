@@ -155,9 +155,9 @@ def compute_signals(merged_df, atm_strike, ltp):
         merged_df_sorted = merged_df.sort_values("Strike")
 
         # Find the first strike where PCR < 0.5
-        first_low = merged_df_sorted[merged_df_sorted["PCR"] < 0.5].head(1)
+        first_low = merged_df_sorted[merged_df_sorted["PCR"] < 0.1].head(1)
         # Find the first strike where PCR >= 1.5
-        first_high = merged_df_sorted[merged_df_sorted["PCR"] >= 1.5].tail(1)
+        first_high = merged_df_sorted[merged_df_sorted["PCR"] >= 1.9].tail(1)
 
         # Get selected strike details for each
         low_strike = int(first_low["Strike"].values[0]) if not first_low.empty else None
