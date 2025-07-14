@@ -179,9 +179,11 @@ def compute_signals(merged_df, atm_strike, ltp):
 
         # 4. Bias logic
         if midpoint is not None:
-            if atm_strike > midpoint:
+            # if atm_strike > midpoint:
+            if ltp > midpoint:
                 signal = "BUY"
-            elif atm_strike < midpoint:
+            # elif atm_strike < midpoint:
+            elif ltp < midpoint:
                 signal = "SELL"
             else:
                 signal = "SIDEWAYS"
@@ -571,7 +573,7 @@ def format_and_show(chain, title, ltp, show_signals=False):
         st.write(f"Lower Support Strike (PCR > 1.5): {result['lower_strike']} | PCR: {result['lower_pcr']}")
         st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
         if result["midpoint"] is not None:
-            st.write(f"Bias: {'Bullish (ATM > Midpoint)' if result['signal']=='BUY' else 'SELL (ATM < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+            st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
         else:
             st.info("Could not determine midpoint for sentiment bias.")
     styled = merged.style.apply(
