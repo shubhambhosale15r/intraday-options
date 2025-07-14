@@ -154,7 +154,7 @@ def compute_signals(merged_df, atm_strike, ltp):
         merged_df_sorted = merged_df.sort_values("Strike")
 
         # 1. Find lowest-strike where PCR < 0.1 (upper resistance boundary)
-        upper_resistance = merged_df_sorted[merged_df_sorted["PCR"] < 0.1]
+        upper_resistance = merged_df_sorted[merged_df_sorted["PCR"] < 0.5]
         if not upper_resistance.empty:
             upper_strike = int(upper_resistance["Strike"].min())
             upper_pcr = float(upper_resistance[upper_resistance["Strike"] == upper_strike]["PCR"].values[0])
@@ -163,7 +163,7 @@ def compute_signals(merged_df, atm_strike, ltp):
             upper_pcr = None
 
         # 2. Find highest-strike where PCR > 1.9 (lower support boundary)
-        lower_support = merged_df_sorted[merged_df_sorted["PCR"] > 1.9]
+        lower_support = merged_df_sorted[merged_df_sorted["PCR"] > 1.5]
         if not lower_support.empty:
             lower_strike = int(lower_support["Strike"].max())
             lower_pcr = float(lower_support[lower_support["Strike"] == lower_strike]["PCR"].values[0])
@@ -567,8 +567,8 @@ def format_and_show(chain, title, ltp, show_signals=False):
         result = compute_signals(merged, atm, ltp)
         st.metric("Signal", result["signal"])
         st.write(f"ATM Strike: {result['atm_strike']}")
-        st.write(f"Upper Resistance Strike (PCR < 0.1): {result['upper_strike']} | PCR: {result['upper_pcr']}")
-        st.write(f"Lower Support Strike (PCR > 1.9): {result['lower_strike']} | PCR: {result['lower_pcr']}")
+        st.write(f"Upper Resistance Strike (PCR < 0.5): {result['upper_strike']} | PCR: {result['upper_pcr']}")
+        st.write(f"Lower Support Strike (PCR > 1.5): {result['lower_strike']} | PCR: {result['lower_pcr']}")
         st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
         if result["midpoint"] is not None:
             st.write(f"Bias: {'Bullish (ATM > Midpoint)' if result['signal']=='BUY' else 'SELL (ATM < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
