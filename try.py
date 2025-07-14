@@ -213,7 +213,9 @@ def compute_signals(merged_df, atm_strike, ltp):
             "upper_pcr": upper_pcr,
             "lower_strike": lower_strike,
             "lower_pcr": lower_pcr,
-            "midpoint": midpoint
+            # "midpoint": midpoint,
+            "sixty_percent":sixty_percent,
+            "thirty_percent":thirty_percent
         }
     except Exception as e:
         logging.error(f"Error in compute_signals: {str(e)}", exc_info=True)
@@ -587,9 +589,15 @@ def format_and_show(chain, title, ltp, show_signals=False):
         st.write(f"ATM Strike: {result['atm_strike']}")
         st.write(f"Upper Resistance Strike (PCR < 0.5): {result['upper_strike']} | PCR: {result['upper_pcr']}")
         st.write(f"Lower Support Strike (PCR > 1.5): {result['lower_strike']} | PCR: {result['lower_pcr']}")
-        st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
-        if result["midpoint"] is not None:
-            st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+        # st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
+        st.write(f"Sentiment Equilibrium sixty_percent: {result['sixty_percent']}")
+        st.write(f"Sentiment Equilibrium thirty_percent: {result['thirty_percent']}")
+        # if result["midpoint"] is not None:
+        #     st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+        # else:
+        #     st.info("Could not determine midpoint for sentiment bias.")
+        if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
+            st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
         else:
             st.info("Could not determine midpoint for sentiment bias.")
     styled = merged.style.apply(
