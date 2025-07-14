@@ -177,6 +177,20 @@ def compute_signals(merged_df, atm_strike, ltp):
         else:
             midpoint = None
 
+        if upper_strike is not None and lower_strike is not None:
+            range_val = upper_strike - lower_strike
+            sixty_percent = lower_strike + 0.618 * range_val
+            thirty_percent = upper_strike - 0.618 * range_val
+        
+            if ltp > sixty_percent:
+                signal = "buy"
+            elif ltp < thirty_percent:
+                signal = "sell"
+            else:
+                signal = "sideways"
+        else:
+            signal = None
+
         # 4. Bias logic
         if midpoint is not None:
             # if atm_strike > midpoint:
