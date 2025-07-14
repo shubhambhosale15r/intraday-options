@@ -226,7 +226,9 @@ def compute_signals(merged_df, atm_strike, ltp):
             "upper_pcr": None,
             "lower_strike": None,
             "lower_pcr": None,
-            "midpoint": None
+            # "midpoint": None,
+            "sixty_percent":None,
+            "thirty_percent":None
         }
 # --- Strike Selection ---
 def select_strikes_atm_half_price(chain, atm_strike):
