@@ -702,6 +702,7 @@ def show_paper_trading_page(cid, token):
 
 # --- Main Application ---
 def main():
+    st.set_page_config(layout="wide")
     init_session_state()
     st_autorefresh(interval=Config.REFRESH_INTERVAL * 1000, key="global_refresh")
     st.title("Fyers Algo Trading")
