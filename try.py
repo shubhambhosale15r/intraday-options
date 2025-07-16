@@ -192,7 +192,7 @@ def compute_signals(merged_df, atm_strike, ltp):
         # else:
         #     signal = "SIDEWAYS"
 
-        4. Bias logic
+        # 4. Bias logic
         if midpoint is not None:
             # if ltp > midpoint:
             if ltp > midpoint:
