@@ -597,10 +597,10 @@ def format_and_show(chain, title, ltp, show_signals=False):
             st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
         else:
             st.info("Could not determine midpoint for sentiment bias.")
-        if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
-            st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
-        else:
-            st.info("Could not determine midpoint for sentiment bias.")
+        # if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
+        #     st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+        # else:
+        #     st.info("Could not determine midpoint for sentiment bias.")
     styled = merged.style.apply(
         lambda row: ["background: yellow" if row["Strike"] == atm else "" for _ in row],
         axis=1
