@@ -594,7 +594,7 @@ def format_and_show(chain, title, ltp, show_signals=False):
         st.write(f"Sentiment Equilibrium sixty_percent: {result['sixty_percent']}")
         st.write(f"Sentiment Equilibrium thirty_percent: {result['thirty_percent']}")
         st.write("ltp: ",ltp)
-        if result["midpoint"] is not None:
+        # if result["midpoint"] is not None:
             # st.write("ltp: ",ltp)
             # st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
         # else:
