@@ -177,7 +177,7 @@ def compute_signals(merged_df, atm_strike, ltp):
         else:
             midpoint = None
 
-        if ltp above 61.8 and below 31.8 
+        # if ltp above 61.8 and below 31.8 
         if upper_strike is not None and lower_strike is not None:
             range_val = upper_strike - lower_strike
             sixty_percent = lower_strike + 0.618 * range_val
