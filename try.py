@@ -154,7 +154,7 @@ def compute_signals(merged_df, atm_strike, ltp):
         merged_df_sorted = merged_df.sort_values("Strike")
 
         # 1. Find lowest-strike where PCR < 0.1 (upper resistance boundary)
-        upper_resistance = merged_df_sorted[merged_df_sorted["PCR"] < 0.5]
+        upper_resistance = merged_df_sorted[merged_df_sorted["PCR"] < 0.1]
         if not upper_resistance.empty:
             upper_strike = int(upper_resistance["Strike"].min())
             upper_pcr = float(upper_resistance[upper_resistance["Strike"] == upper_strike]["PCR"].values[0])
@@ -163,7 +163,7 @@ def compute_signals(merged_df, atm_strike, ltp):
             upper_pcr = None
 
         # 2. Find highest-strike where PCR > 1.9 (lower support boundary)
-        lower_support = merged_df_sorted[merged_df_sorted["PCR"] > 1.5]
+        lower_support = merged_df_sorted[merged_df_sorted["PCR"] > 1.9]
         if not lower_support.empty:
             lower_strike = int(lower_support["Strike"].max())
             lower_pcr = float(lower_support[lower_support["Strike"] == lower_strike]["PCR"].values[0])
