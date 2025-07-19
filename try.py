@@ -177,33 +177,33 @@ def compute_signals(merged_df, atm_strike, ltp):
         else:
             midpoint = None
 
-        # if ltp above 61.8 and below 31.8 
-        # if upper_strike is not None and lower_strike is not None:
-        #     range_val = upper_strike - lower_strike
-        #     sixty_percent = lower_strike + 0.618 * range_val
-        #     thirty_percent = upper_strike - 0.618 * range_val
+        if ltp above 61.8 and below 31.8 
+        if upper_strike is not None and lower_strike is not None:
+            range_val = upper_strike - lower_strike
+            sixty_percent = lower_strike + 0.618 * range_val
+            thirty_percent = upper_strike - 0.618 * range_val
         
-        #     if ltp > sixty_percent:
-        #         signal = "BUY"
-        #     elif ltp < thirty_percent:
-        #         signal = "SELL"
-        #     else:
-        #         signal = "SIDEWAYS"
-        # else:
-        #     signal = "SIDEWAYS"
-
-        # 4. Bias logic
-        if midpoint is not None:
-            # if ltp > midpoint:
-            if ltp > midpoint:
+            if ltp > sixty_percent:
                 signal = "BUY"
-            # elif ltp < midpoint:
-            elif ltp < midpoint:
+            elif ltp < thirty_percent:
                 signal = "SELL"
             else:
                 signal = "SIDEWAYS"
         else:
             signal = "SIDEWAYS"
+
+        # 4. Bias logic
+        # if midpoint is not None:
+        #     # if ltp > midpoint:
+        #     if ltp > midpoint:
+        #         signal = "BUY"
+        #     # elif ltp < midpoint:
+        #     elif ltp < midpoint:
+        #         signal = "SELL"
+        #     else:
+        #         signal = "SIDEWAYS"
+        # else:
+        #     signal = "SIDEWAYS"
 
         return {
             "signal": signal,
@@ -212,9 +212,9 @@ def compute_signals(merged_df, atm_strike, ltp):
             "upper_pcr": upper_pcr,
             "lower_strike": lower_strike,
             "lower_pcr": lower_pcr,
-            "midpoint": midpoint
-            # "sixty_percent":sixty_percent,
-            # "thirty_percent":thirty_percent
+            # "midpoint": midpoint,
+            "sixty_percent":sixty_percent,
+            "thirty_percent":thirty_percent
         }
     except Exception as e:
         logging.error(f"Error in compute_signals: {str(e)}", exc_info=True)
@@ -226,8 +226,8 @@ def compute_signals(merged_df, atm_strike, ltp):
             "lower_strike": None,
             "lower_pcr": None,
             "midpoint": None
-            # "sixty_percent":None,
-            # "thirty_percent":None
+            "sixty_percent":None,
+            "thirty_percent":None
         }
 # --- Strike Selection ---
 def select_strikes_atm_half_price(chain, atm_strike):
@@ -590,18 +590,18 @@ def format_and_show(chain, title, ltp, show_signals=False):
         st.write(f"ATM Strike: {result['atm_strike']}")
         st.write(f"Upper Resistance Strike (PCR < 0.5): {result['upper_strike']} | PCR: {result['upper_pcr']}")
         st.write(f"Lower Support Strike (PCR > 1.5): {result['lower_strike']} | PCR: {result['lower_pcr']}")
-        st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
-        # st.write(f"Sentiment Equilibrium sixty_percent: {result['sixty_percent']}")
-        # st.write(f"Sentiment Equilibrium thirty_percent: {result['thirty_percent']}")
+        # st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
+        st.write(f"Sentiment Equilibrium sixty_percent: {result['sixty_percent']}")
+        st.write(f"Sentiment Equilibrium thirty_percent: {result['thirty_percent']}")
         if result["midpoint"] is not None:
             st.write("ltp: ",ltp)
-            st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
-        else:
-            st.info("Could not determine midpoint for sentiment bias.")
-        # if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
-        #     st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+            # st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
         # else:
         #     st.info("Could not determine midpoint for sentiment bias.")
+        if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
+            st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
+        else:
+            st.info("Could not determine midpoint for sentiment bias.")
     styled = merged.style.apply(
         lambda row: ["background: yellow" if row["Strike"] == atm else "" for _ in row],
         axis=1
