@@ -225,7 +225,7 @@ def compute_signals(merged_df, atm_strike, ltp):
             "upper_pcr": None,
             "lower_strike": None,
             "lower_pcr": None,
-            "midpoint": None
+            # "midpoint": None,
             "sixty_percent":None,
             "thirty_percent":None
         }
