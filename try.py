@@ -10,35 +10,34 @@ import uuid
 from streamlit_autorefresh import st_autorefresh
 from functools import lru_cache
 import os
+# from dotenv import load_dotenv
 
-# Setting wide mode as default and handling Streamlit page config securely
-if not st.get_option("server.headless"):
-    st.set_page_config(
-        page_title="Fyers Algo OI",
-        page_icon="",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
 
-# --- Constants ---
+#setting wide mode as default
+st.set_page_config(
+    page_title="Fyers Algo",
+    page_icon="💸",
+    layout="wide",
+    initial_sidebar_state="expanded"  # This is the key line
+)
+# Constants
 class Config:
     REFRESH_INTERVAL = 60  # seconds
     API_RATE_LIMIT = 200
     API_WINDOW = 60  # seconds
-    LOT_SIZE = 75
+    LOT_SIZE = 75 
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # seconds
 
-# --- Logging ---
-LOG_FILE = "trading_app.log"
+# Initialize logging
 logging.basicConfig(
-    filename=LOG_FILE,
+    filename="trading_app.log",
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# --- Error Handling Decorator ---
+# Error handling decorator
 def handle_errors(func):
     def wrapper(*args, **kwargs):
         retries = 0
@@ -55,7 +54,7 @@ def handle_errors(func):
                     return None
     return wrapper
 
-# --- Session State Initialization ---
+# Initialize all session state in one place
 def init_session_state():
     defaults = {
         "option_chain_api_count": 0,
@@ -78,20 +77,23 @@ def init_session_state():
         "token": "",
         "page": "trading"
     }
+    
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
-# --- Credentials Loader ---
+# Load credentials from environment variables
 def load_credentials():
+    # load_dotenv()
     st.session_state.cid = os.getenv("FYERS_CID", st.session_state.get("cid", ""))
     st.session_state.token = os.getenv("FYERS_TOKEN", st.session_state.get("token", ""))
 
-# --- Rate Limiting ---
+# Rate limiting with improved logic
 def enforce_rate_limit():
     now = datetime.now()
     window = now - st.session_state["api_window_start"]
     total_calls = st.session_state["option_chain_api_count"] + st.session_state["quote_api_count"]
+    
     if window > timedelta(seconds=Config.API_WINDOW):
         st.session_state["api_window_start"] = now
         st.session_state["option_chain_api_count"] = 0
@@ -105,7 +107,7 @@ def enforce_rate_limit():
         st.session_state["option_chain_api_count"] = 0
         st.session_state["quote_api_count"] = 0
 
-# --- API Calls With Retry ---
+# API calls with retry logic
 @handle_errors
 @lru_cache(maxsize=32)
 def get_option_chain_data(cid, token, sym, expiry_ts=""):
@@ -146,101 +148,86 @@ def get_symbol_ltp(cid, token, symbol):
         return None
     return resp["d"][0]["v"]["lp"]
 
-# --- Signal Computation ---
+# Signal computation with improved logging
 def compute_signals(merged_df, atm_strike, ltp):
     try:
-        # Calculate PCR for each strike
-        merged_df["PCR"] = merged_df["PE_OI"] / merged_df["CE_OI"]
-        merged_df_sorted = merged_df.sort_values("Strike")
-
-        # 1. Find lowest-strike where PCR < 0.1 (upper resistance boundary)
-        upper_resistance = merged_df_sorted[merged_df_sorted["PCR"] < 0.5]
-        if not upper_resistance.empty:
-            upper_strike = int(upper_resistance["Strike"].min())
-            upper_pcr = float(upper_resistance[upper_resistance["Strike"] == upper_strike]["PCR"].values[0])
-        else:
-            upper_strike = None
-            upper_pcr = None
-
-        # 2. Find highest-strike where PCR > 1.9 (lower support boundary)
-        lower_support = merged_df_sorted[merged_df_sorted["PCR"] > 1.5]
-        if not lower_support.empty:
-            lower_strike = int(lower_support["Strike"].max())
-            lower_pcr = float(lower_support[lower_support["Strike"] == lower_strike]["PCR"].values[0])
-        else:
-            lower_strike = None
-            lower_pcr = None
-
-        # 3. Calculate the midpoint
-        if upper_strike is not None and lower_strike is not None:
-            midpoint = (upper_strike + lower_strike) / 2
-        else:
-            midpoint = None
-
-        # if ltp above 61.8 and below 31.8 
-        if upper_strike is not None and lower_strike is not None:
-            range_val = upper_strike - lower_strike
-            sixty_percent = lower_strike + 0.618 * range_val
-            thirty_percent = upper_strike - 0.618 * range_val
+        strikes = sorted(merged_df["Strike"].dropna().unique().tolist())
+        idx = strikes.index(atm_strike)
         
-            if ltp > sixty_percent:
-                signal = "BUY"
-            elif ltp < thirty_percent:
-                signal = "SELL"
-            else:
-                signal = "SIDEWAYS"
+        # ATM Strike and atm ce and atm pe prices
+        atm_row = merged_df[merged_df["Strike"] == atm_strike]
+        atm_ce_price = atm_row["CE_ltp"].values[0] if "CE_ltp" in atm_row else None
+        atm_pe_price = atm_row["PE_ltp"].values[0] if "PE_ltp" in atm_row else None
+
+        # Identify ITM strikes
+        ce_itm_strikes = strikes[max(0, idx-3):idx] if idx >= 1 else []
+        pe_itm_strikes = strikes[idx+1:min(len(strikes), idx+4)] if idx < len(strikes) - 1 else []
+
+        # Identify OTM strikes
+        ce_otm_strikes = strikes[idx+1:min(len(strikes), idx+4)] if idx < len(strikes) - 1 else []
+        pe_otm_strikes = strikes[max(0, idx-3):idx] if idx >= 1 else []
+
+        # Calculate prices
+        itm_pe_price = merged_df[merged_df["Strike"].isin(pe_itm_strikes)]["PE_ltp"].sum()
+        itm_ce_price = merged_df[merged_df["Strike"].isin(ce_itm_strikes)]["CE_ltp"].sum()
+        otm_pe_price = merged_df[merged_df["Strike"].isin(pe_otm_strikes)]["PE_ltp"].sum()
+        otm_ce_price = merged_df[merged_df["Strike"].isin(ce_otm_strikes)]["CE_ltp"].sum()
+
+        # calculate OI changes
+        itm_pe_oi = merged_df[merged_df["Strike"].isin(pe_itm_strikes)]["PE_OICh"].sum()
+        itm_ce_oi = merged_df[merged_df["Strike"].isin(ce_itm_strikes)]["CE_OICh"].sum()
+        otm_pe_oi = merged_df[merged_df["Strike"].isin(pe_otm_strikes)]["PE_OICh"].sum()
+        otm_ce_oi = merged_df[merged_df["Strike"].isin(ce_otm_strikes)]["CE_OICh"].sum()
+
+        # Calculate money flow
+        ce_money_flow = (itm_ce_price * itm_ce_oi) + (otm_ce_price * otm_ce_oi)
+        pe_money_flow = (itm_pe_price * itm_pe_oi) + (otm_pe_price * otm_pe_oi)
+
+        atm_row = merged_df[merged_df["Strike"] == atm_strike]
+        if not atm_row.empty:
+            atm_ce_ltp = atm_row["CE_ltp"].values[0]
+            atm_pe_ltp = atm_row["PE_ltp"].values[0]
+            atm_ce_oi = atm_row["CE_OICh"].values[0]
+            atm_pe_oi = atm_row["PE_OICh"].values[0]
+
+            ce_money_flow += atm_ce_ltp * atm_ce_oi
+            pe_money_flow += atm_pe_ltp * atm_pe_oi
+
+        # Signal determination
+        if ( pe_money_flow > 1.10 * ce_money_flow) or (ce_money_flow < 0 and pe_money_flow > 0):
+            signal = "BUY"
+        elif (ce_money_flow >1.10* pe_money_flow ) or (pe_money_flow < 0 and ce_money_flow > 0):
+            signal = "SELL"
         else:
             signal = "SIDEWAYS"
 
-        # 4. Bias logic
-        # if midpoint is not None:
-        #     # if ltp > midpoint:
-        #     if ltp > midpoint:
-        #         signal = "BUY"
-        #     # elif ltp < midpoint:
-        #     elif ltp < midpoint:
-        #         signal = "SELL"
-        #     else:
-        #         signal = "SIDEWAYS"
-        # else:
-        #     signal = "SIDEWAYS"
+        # Logging for debugging
+        logging.info(f"Computed Signal: {signal} | CE Flow: {ce_money_flow:.2f} | PE Flow: {pe_money_flow:.2f}")
 
-        return {
-            "signal": signal,
-            "atm_strike": atm_strike,
-            "upper_strike": upper_strike,
-            "upper_pcr": upper_pcr,
-            "lower_strike": lower_strike,
-            "lower_pcr": lower_pcr,
-            # "midpoint": midpoint,
-            "sixty_percent":sixty_percent,
-            "thirty_percent":thirty_percent
-        }
+        return signal,ce_money_flow, pe_money_flow
+
     except Exception as e:
         logging.error(f"Error in compute_signals: {str(e)}", exc_info=True)
-        return {
-            "signal": "ERROR",
-            "atm_strike": atm_strike,
-            "upper_strike": None,
-            "upper_pcr": None,
-            "lower_strike": None,
-            "lower_pcr": None,
-            # "midpoint": None,
-            "sixty_percent":None,
-            "thirty_percent":None
-        }
-# --- Strike Selection ---
+        return "SIDEWAYS"
+    
+# Optimized strike selection
 def select_strikes_atm_half_price(chain, atm_strike):
     try:
         df = pd.DataFrame(chain)
         if df.empty or atm_strike is None:
             return None, None, None, None
+
         ce = df[df["option_type"] == "CE"].copy()
         pe = df[df["option_type"] == "PE"].copy()
+
+        # Find ATM PE and CE rows
         atm_pe_row = pe[pe["strike_price"] == atm_strike]
         atm_ce_row = ce[ce["strike_price"] == atm_strike]
+
         sell_pe_row = atm_pe_row.iloc[0].to_dict() if not atm_pe_row.empty else None
         sell_ce_row = atm_ce_row.iloc[0].to_dict() if not atm_ce_row.empty else None
+
+        # Find half-price strikes with vectorized operations
         buy_pe_row = None
         if sell_pe_row and "ltp" in sell_pe_row and sell_pe_row["ltp"] > 0:
             target = sell_pe_row["ltp"] / 4
@@ -248,6 +235,7 @@ def select_strikes_atm_half_price(chain, atm_strike):
             pe_candidates["ltp_diff"] = (pe_candidates["ltp"] - target).abs()
             if not pe_candidates.empty:
                 buy_pe_row = pe_candidates.nsmallest(1, "ltp_diff").iloc[0].to_dict()
+
         buy_ce_row = None
         if sell_ce_row and "ltp" in sell_ce_row and sell_ce_row["ltp"] > 0:
             target = sell_ce_row["ltp"] / 4
@@ -255,12 +243,14 @@ def select_strikes_atm_half_price(chain, atm_strike):
             ce_candidates["ltp_diff"] = (ce_candidates["ltp"] - target).abs()
             if not ce_candidates.empty:
                 buy_ce_row = ce_candidates.nsmallest(1, "ltp_diff").iloc[0].to_dict()
+
         return sell_pe_row, buy_pe_row, sell_ce_row, buy_ce_row
+
     except Exception as e:
         logging.error(f"Error in select_strikes_atm_half_price: {str(e)}", exc_info=True)
         return None, None, None, None
 
-# --- Order Management ---
+# Order management with improved error handling
 @handle_errors
 def cancel_order(fyers, order_id):
     try:
@@ -288,6 +278,7 @@ def place_order_and_check(fyers, order):
     try:
         resp = fyers.place_order(data=order)
         logging.info(f"Order placed for {order['symbol']}: {resp}")
+        
         if resp.get("s") == "ok":
             oid = resp.get("id")
             time.sleep(2)  # Wait for order to process
@@ -304,7 +295,7 @@ def place_order_and_check(fyers, order):
         logging.exception(f"Place order error: {e}")
         raise
 
-# --- Trading Logic State ---
+# Trading logic with improved state management
 def has_open_orders_for_last_signal(fyers):
     ids = st.session_state.get("live_last_signal_order_ids", [])
     if not ids:
@@ -316,16 +307,20 @@ def has_open_orders_for_last_signal(fyers):
         logging.warning(f"Could not check open orders: {e}")
         return False
 
-# --- Paper Trading ---
+# Paper trading with improved position tracking
 def handle_paper_trade(signal, sell_pe, buy_pe, sell_ce, buy_ce):
     try:
         orders = []
         lot = Config.LOT_SIZE
         timestamp = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H:%M:%S")
         current_signal = st.session_state.get("paper_last_signal")
+
+        # Skip if signal is the same as last time
         if current_signal == signal and st.session_state.paper_positions:
             logging.info(f"[PAPER] Signal {signal} is already active. No new trades.")
             return []
+
+        # Case 1: BUY → SELL (Exit BUY, Enter SELL)
         if current_signal == "BUY" and signal == "SELL":
             for symbol, position in list(st.session_state.paper_positions.items()):
                 close_action = "SELL" if position["action"] == "BUY" else "BUY"
@@ -337,13 +332,24 @@ def handle_paper_trade(signal, sell_pe, buy_pe, sell_ce, buy_ce):
                     "type": "CLOSE"
                 })
             logging.info("[PAPER] Exiting BUY positions for SELL signal")
+
             if buy_ce and sell_ce:
                 orders.append({
-                    "symbol": buy_ce["symbol"], "qty": lot, "side": 1, "action": "BUY", "price": buy_ce["ltp"]
+                    "symbol": buy_ce["symbol"], 
+                    "qty": lot, 
+                    "side": 1, 
+                    "action": "BUY", 
+                    "price": buy_ce["ltp"]
                 })
                 orders.append({
-                    "symbol": sell_ce["symbol"], "qty": lot, "side": -1, "action": "SELL", "price": sell_ce["ltp"]
+                    "symbol": sell_ce["symbol"], 
+                    "qty": lot, 
+                    "side": -1, 
+                    "action": "SELL", 
+                    "price": sell_ce["ltp"]
                 })
+
+        # Case 2: SELL → BUY (Exit SELL, Enter BUY)
         elif current_signal == "SELL" and signal == "BUY":
             for symbol, position in list(st.session_state.paper_positions.items()):
                 close_action = "SELL" if position["action"] == "BUY" else "BUY"
@@ -355,31 +361,62 @@ def handle_paper_trade(signal, sell_pe, buy_pe, sell_ce, buy_ce):
                     "type": "CLOSE"
                 })
             logging.info("[PAPER] Exiting SELL positions for BUY signal")
+
             if buy_pe and sell_pe:
                 orders.append({
-                    "symbol": buy_pe["symbol"], "qty": lot, "side": 1, "action": "BUY", "price": buy_pe["ltp"]
+                    "symbol": buy_pe["symbol"], 
+                    "qty": lot, 
+                    "side": 1, 
+                    "action": "BUY", 
+                    "price": buy_pe["ltp"]
                 })
                 orders.append({
-                    "symbol": sell_pe["symbol"], "qty": lot, "side": -1, "action": "SELL", "price": sell_pe["ltp"]
+                    "symbol": sell_pe["symbol"], 
+                    "qty": lot, 
+                    "side": -1, 
+                    "action": "SELL", 
+                    "price": sell_pe["ltp"]
                 })
+
+        # Case 3: New signal (no existing position)
         elif current_signal is None and signal in ["BUY", "SELL"]:
             if signal == "BUY" and buy_pe and sell_pe:
                 orders.append({
-                    "symbol": buy_pe["symbol"], "qty": lot, "side": 1, "action": "BUY", "price": buy_pe["ltp"]
+                    "symbol": buy_pe["symbol"], 
+                    "qty": lot, 
+                    "side": 1, 
+                    "action": "BUY", 
+                    "price": buy_pe["ltp"]
                 })
                 orders.append({
-                    "symbol": sell_pe["symbol"], "qty": lot, "side": -1, "action": "SELL", "price": sell_pe["ltp"]
+                    "symbol": sell_pe["symbol"], 
+                    "qty": lot, 
+                    "side": -1, 
+                    "action": "SELL", 
+                    "price": sell_pe["ltp"]
                 })
             elif signal == "SELL" and buy_ce and sell_ce:
                 orders.append({
-                    "symbol": buy_ce["symbol"], "qty": lot, "side": 1, "action": "BUY", "price": buy_ce["ltp"]
+                    "symbol": buy_ce["symbol"], 
+                    "qty": lot, 
+                    "side": 1, 
+                    "action": "BUY", 
+                    "price": buy_ce["ltp"]
                 })
                 orders.append({
-                    "symbol": sell_ce["symbol"], "qty": lot, "side": -1, "action": "SELL", "price": sell_ce["ltp"]
+                    "symbol": sell_ce["symbol"], 
+                    "qty": lot, 
+                    "side": -1, 
+                    "action": "SELL", 
+                    "price": sell_ce["ltp"]
                 })
+
+        # Case 4: SIDEWAYS (do nothing)
         elif signal == "SIDEWAYS":
             logging.info("[PAPER] SIDEWAYS: Holding existing positions")
             return []
+
+        # Execute orders
         placed_ids = []
         for order in orders:
             trade_id = str(uuid.uuid4())[:8]
@@ -397,11 +434,15 @@ def handle_paper_trade(signal, sell_pe, buy_pe, sell_ce, buy_ce):
             st.session_state.trade_history.append(trade)
             placed_ids.append(trade_id)
             logging.info(
-                f"[PAPER] {order['action']} {order['qty']} of {order['symbol']} at {order['price']}"
+                f"[PAPER] {order['action']} {order['qty']} of {order['symbol']} "
+                f"at {order['price']}"
             )
+
         if placed_ids and signal in ["BUY", "SELL"]:
             st.session_state["paper_last_signal"] = signal
+
         return placed_ids
+
     except Exception as e:
         logging.error(f"Error in handle_paper_trade: {str(e)}", exc_info=True)
         return []
@@ -424,13 +465,18 @@ def update_paper_positions(trade):
         else:
             if symbol in st.session_state.paper_positions:
                 position = st.session_state.paper_positions[symbol]
+                
+                # Calculate PnL
                 if position["action"] == "BUY":
                     pnl = (trade["price"] - position["entry_price"]) * position["qty"]
                 else:
                     pnl = (position["entry_price"] - trade["price"]) * position["qty"]
+                    
                 st.session_state.paper_pnl["realized"] += pnl
                 trade["pnl"] = pnl
+                
                 del st.session_state.paper_positions[symbol]
+                
                 if not st.session_state.paper_positions:
                     st.session_state["last_signal"] = None
     except Exception as e:
@@ -441,17 +487,22 @@ def update_unrealized_pnl(cid, token):
     if not st.session_state.paper_positions:
         st.session_state.paper_pnl["unrealized"] = 0.0
         return
+        
     total_unrealized = 0.0
     for symbol, position in st.session_state.paper_positions.items():
         ltp = get_symbol_ltp(cid, token, symbol)
         if ltp is None:
             ltp = position.get("current_price", position["entry_price"])
+        
         position["current_price"] = ltp
+        
         if position["action"] == "BUY":
             pnl = (ltp - position["entry_price"]) * position["qty"]
         else:
             pnl = (position["entry_price"] - ltp) * position["qty"]
+            
         total_unrealized += pnl
+    
     st.session_state.paper_pnl["unrealized"] = total_unrealized
     st.session_state.pnl_update_time = datetime.now()
 
@@ -459,20 +510,25 @@ def update_unrealized_pnl(cid, token):
 def update_position_prices(cid, token):
     if not st.session_state.paper_positions:
         return
+        
     for symbol, position in st.session_state.paper_positions.items():
         ltp = get_symbol_ltp(cid, token, symbol)
         if ltp is not None:
             position["current_price"] = ltp
 
-# --- Live Trading ---
+# Live trading with improved order handling
 def handle_basket_orders_atomic(signal, sell_pe, buy_pe, sell_ce, buy_ce, fyers):
     try:
         orders = []
         lot = Config.LOT_SIZE
         current_signal = st.session_state.get("last_signal")
+
+        # Skip if signal is the same as last time
         if current_signal == signal:
             logging.info(f"Signal {signal} is already active. No new trades.")
             return []
+
+        # Case 1: BUY → SELL (Exit BUY, Enter SELL)
         if current_signal == "BUY" and signal == "SELL":
             try:
                 positions = fyers.positions().get("netPositions", [])
@@ -491,13 +547,26 @@ def handle_basket_orders_atomic(signal, sell_pe, buy_pe, sell_ce, buy_ce, fyers)
             except Exception as e:
                 logging.error(f"Failed to exit positions: {e}", exc_info=True)
                 return []
+
             if buy_ce and sell_ce:
                 orders.append({
-                    "symbol": buy_ce["symbol"], "qty": lot, "type": 2, "side": 1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": buy_ce["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": 1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
                 orders.append({
-                    "symbol": sell_ce["symbol"], "qty": lot, "type": 2, "side": -1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": sell_ce["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": -1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
+
+        # Case 2: SELL → BUY (Exit SELL, Enter BUY)
         elif current_signal == "SELL" and signal == "BUY":
             try:
                 positions = fyers.positions().get("netPositions", [])
@@ -516,31 +585,68 @@ def handle_basket_orders_atomic(signal, sell_pe, buy_pe, sell_ce, buy_ce, fyers)
             except Exception as e:
                 logging.error(f"Failed to exit positions: {e}", exc_info=True)
                 return []
+
             if buy_pe and sell_pe:
                 orders.append({
-                    "symbol": buy_pe["symbol"], "qty": lot, "type": 2, "side": 1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": buy_pe["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": 1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
                 orders.append({
-                    "symbol": sell_pe["symbol"], "qty": lot, "type": 2, "side": -1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": sell_pe["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": -1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
+
+        # Case 3: New signal (no existing position)
         elif current_signal is None and signal in ["BUY", "SELL"]:
             if signal == "BUY" and buy_pe and sell_pe:
                 orders.append({
-                    "symbol": buy_pe["symbol"], "qty": lot, "type": 2, "side": 1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": buy_pe["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": 1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
                 orders.append({
-                    "symbol": sell_pe["symbol"], "qty": lot, "type": 2, "side": -1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": sell_pe["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": -1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
             elif signal == "SELL" and buy_ce and sell_ce:
                 orders.append({
-                    "symbol": buy_ce["symbol"], "qty": lot, "type": 2, "side": 1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": buy_ce["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": 1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
                 orders.append({
-                    "symbol": sell_ce["symbol"], "qty": lot, "type": 2, "side": -1, "productType": "MARGIN", "validity": "DAY"
+                    "symbol": sell_ce["symbol"], 
+                    "qty": lot, 
+                    "type": 2, 
+                    "side": -1,
+                    "productType": "MARGIN",
+                    "validity": "DAY"
                 })
+
+        # Case 4: SIDEWAYS (do nothing)
         elif signal == "SIDEWAYS":
             logging.info("[LIVE] SIDEWAYS: Holding positions")
             return []
+
+        # Execute orders
         placed_ids = []
         for order in orders:
             oid, status = place_order_and_check(fyers, order)
@@ -550,78 +656,94 @@ def handle_basket_orders_atomic(signal, sell_pe, buy_pe, sell_ce, buy_ce, fyers)
                     cancel_order(fyers, pid)
                 return []
             placed_ids.append(oid)
+
         if placed_ids:
             st.session_state["last_signal"] = signal
             logging.info(f"[LIVE] {signal} basket executed!")
+        
         return placed_ids
+
     except Exception as e:
         logging.error(f"Error in handle_basket_orders_atomic: {str(e)}", exc_info=True)
         return []
 
-# --- Data Display Functions ---
+# Data display functions with improved formatting
 def format_and_show(chain, title, ltp, show_signals=False):
     df = pd.DataFrame(chain)
     if df.empty:
         st.info(f"No data for {title}")
         return None, None
+        
+    # Process CE and PE data
     ce = df[df["option_type"] == "CE"]
     pe = df[df["option_type"] == "PE"]
-    cols = ["symbol", "strike_price", "oi", "volume", "ltp", "ask", "bid", "ltpch", "ltpchp", "oich", "oichp", "prev_oi"]
+    
+    # Define columns and rename them
+    cols = ["symbol", "strike_price", "oi", "volume", "ltp", "ask", "bid", 
+            "ltpch", "ltpchp", "oich", "oichp", "prev_oi"]
+    
     ce_df = ce[cols].rename(columns={
-        "strike_price": "Strike", "oi": "OI", "volume": "Vol", "ltpch": "LTPCh", "ltpchp": "LTPChP", "oich": "OICh", "oichp": "OIChP", "prev_oi": "PrevOI"
+        "strike_price": "Strike", 
+        "oi": "OI", 
+        "volume": "Vol", 
+        "ltpch": "LTPCh", 
+        "ltpchp": "LTPChP", 
+        "oich": "OICh", 
+        "oichp": "OIChP", 
+        "prev_oi": "PrevOI"
     })
+    
     pe_df = pe[cols].rename(columns={
-        "strike_price": "Strike", "oi": "OI", "volume": "Vol", "ltpch": "LTPCh", "ltpchp": "LTPChP", "oich": "OICh", "oichp": "OIChP", "prev_oi": "PrevOI"
+        "strike_price": "Strike", 
+        "oi": "OI", 
+        "volume": "Vol", 
+        "ltpch": "LTPCh", 
+        "ltpchp": "LTPChP", 
+        "oich": "OICh", 
+        "oichp": "OIChP", 
+        "prev_oi": "PrevOI"
     })
+    
+    # Merge CE and PE data
     merged = pd.merge(
         ce_df.add_prefix("CE_"),
         pe_df.add_prefix("PE_"),
-        left_on="CE_Strike",
+        left_on="CE_Strike", 
         right_on="PE_Strike",
         how="outer"
     ).rename(columns={"CE_Strike": "Strike"}).drop("PE_Strike", axis=1)
+    
+    # Find ATM strike
     atm = None
     if ltp is not None and not merged["Strike"].dropna().empty:
         atm = min(merged["Strike"].dropna(), key=lambda x: abs(x - ltp))
+    
     st.subheader(title)
-    if show_signals and atm is not None:
-        result = compute_signals(merged, atm, ltp)
-        st.metric("Signal", result["signal"])
-        st.write(f"ATM Strike: {result['atm_strike']}")
-        st.write(f"Upper Resistance Strike (PCR < 0.5): {result['upper_strike']} | PCR: {result['upper_pcr']}")
-        st.write(f"Lower Support Strike (PCR > 1.5): {result['lower_strike']} | PCR: {result['lower_pcr']}")
-        # st.write(f"Sentiment Equilibrium (Midpoint): {result['midpoint']}")
-        st.write(f"Sentiment Equilibrium sixty_percent: {result['sixty_percent']}")
-        st.write(f"Sentiment Equilibrium thirty_percent: {result['thirty_percent']}")
-        st.write("ltp: ",ltp)
-        # if result["midpoint"] is not None:
-            # st.write("ltp: ",ltp)
-            # st.write(f"Bias: {'Bullish (ltp > Midpoint)' if result['signal']=='BUY' else 'SELL (ltp < Midpoint)' if result['signal']=='SELL' else 'SIDEWAYS'}")
-        # else:
-        #     st.info("Could not determine midpoint for sentiment bias.")
-        if result["sixty_percent"] is not None and result["thirty_percent"] is not None:
-            st.write(f"Bias: {'Bullish (ltp > sixty_percent)' if result['signal']=='BUY' else 'SELL (ltp < thirty_percent)' if result['signal']=='SELL' else 'SIDEWAYS'}")
-        else:
-            st.info("Could not determine midpoint for sentiment bias.")
-    styled = merged.style.apply(
-        lambda row: ["background: yellow" if row["Strike"] == atm else "" for _ in row],
-        axis=1
-    )
-    st.dataframe(styled)
+    
+    signal,ce_money_flow,pe_money_flow = compute_signals(merged, atm, ltp)
+    
+    st.write("Signal: ", signal)
+    st.write("CE Money Flow: ", ce_money_flow)
+    st.write("PE Money Flow: ", pe_money_flow)
+
     st.caption(f"ATM Strike: {atm} | Underlying LTP: {ltp}")
+    
     if show_signals and atm is not None:
-        return result, atm
+        return signal, atm
     return None, atm
+
 
 @handle_errors
 def update_all_data(cid, token, sym, paper_trade_enabled):
     fy = fyersModel.FyersModel(client_id=cid, token=token, is_async=False, log_path="")
     enforce_rate_limit()
     st.session_state["option_chain_api_count"] += 1
+
     meta = fy.optionchain(data={"symbol": sym, "timestamp": ""})
     if meta.get("code") != 200:
         logging.error("Failed to fetch expiry data")
         return None, None, None
+
     exp = sorted(
         [(e["date"], e.get("expiry")) for e in meta["data"]["expiryData"]],
         key=lambda x: datetime.strptime(x[0], "%d-%m-%Y")
@@ -630,28 +752,36 @@ def update_all_data(cid, token, sym, paper_trade_enabled):
     dates = [datetime.strptime(d, "%d-%m-%Y").date() for d, _ in exp]
     idx = next((i for i, d in enumerate(dates) if d >= today), 0)
     curr_date, curr_ts = exp[idx]
+
     ltp = get_underlying_ltp(cid, token, sym)
     chain = get_option_chain_data(cid, token, sym, expiry_ts=curr_ts)
+
     if paper_trade_enabled and st.session_state.get("paper_positions"):
         update_position_prices(cid, token)
         update_unrealized_pnl(cid, token)
+
     return ltp, chain, curr_date
 
-# --- UI Pages ---
+# UI Pages
 def show_signal_history():
     st.subheader("📜 Signal History")
     ist = pytz.timezone("Asia/Kolkata")
     st.write(f"🕒 Updated: {datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')}")
+    
     if not st.session_state.get("signal_history", []):
         st.info("No signal history available yet")
         return
+    
     history_df = pd.DataFrame(st.session_state.signal_history)
     history_df = history_df.sort_values("timestamp", ascending=False)
+    
     formatted_df = history_df.copy()
     formatted_df["underlying_ltp"] = formatted_df["underlying_ltp"].apply(
         lambda x: f"₹{x:.2f}" if isinstance(x, (int, float)) else x
     )
+    
     st.dataframe(formatted_df)
+    
     csv = history_df.to_csv(index=False)
     st.download_button(
         label="Download Signal History",
@@ -662,13 +792,16 @@ def show_signal_history():
 
 def show_paper_trading_page(cid, token):
     st.subheader("📝 Paper Trading Dashboard")
+    
     col1, col2, col3 = st.columns(3)
     col1.metric("💰 Realized PnL", f"₹{st.session_state.paper_pnl['realized']:.2f}")
     col2.metric("📊 Unrealized PnL", f"₹{st.session_state.paper_pnl['unrealized']:.2f}")
     total_pnl = st.session_state.paper_pnl['realized'] + st.session_state.paper_pnl['unrealized']
     col3.metric("💵 Total PnL", f"₹{total_pnl:.2f}", delta=f"{total_pnl:.2f}")
+    
     ist = pytz.timezone("Asia/Kolkata")
     st.write(f"🕒 Updated: {datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')}")
+    
     st.subheader("📊 Current Positions")
     if st.session_state.paper_positions:
         positions_list = []
@@ -677,6 +810,7 @@ def show_paper_trading_page(cid, token):
                 pnl = (position["current_price"] - position["entry_price"]) * position["qty"]
             else:
                 pnl = (position["entry_price"] - position["current_price"]) * position["qty"]
+                
             positions_list.append({
                 "Symbol": position["symbol"],
                 "Action": position["action"],
@@ -686,20 +820,25 @@ def show_paper_trading_page(cid, token):
                 "PnL": f"₹{pnl:.2f}",
                 "Signal": position["signal"]
             })
+        
         positions_df = pd.DataFrame(positions_list)
         st.dataframe(positions_df)
     else:
         st.info("No open positions")
+    
     st.subheader("📜 Trade History")
     if st.session_state.trade_history:
         history_df = pd.DataFrame(st.session_state.trade_history)
+        
         if not history_df.empty:
             desired_columns = ["timestamp", "symbol", "action", "qty", "price", "signal", "type", "pnl"]
             available_columns = [col for col in desired_columns if col in history_df.columns]
             history_df = history_df[available_columns]
+            
             history_df["timestamp"] = pd.to_datetime(history_df["timestamp"])
             history_df["timestamp"] = history_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
             history_df = history_df.sort_values("timestamp", ascending=False)
+            
             if "price" in history_df:
                 history_df["price"] = history_df["price"].apply(
                     lambda x: f"₹{x:.2f}" if isinstance(x, (int, float)) else x
@@ -708,7 +847,9 @@ def show_paper_trading_page(cid, token):
                 history_df["pnl"] = history_df["pnl"].apply(
                     lambda x: f"₹{x:.2f}" if isinstance(x, (int, float)) else x
                 )
+        
         st.dataframe(history_df)
+        
         if st.button("💾 Download Trade History"):
             csv = history_df.to_csv(index=False)
             st.download_button(
@@ -719,6 +860,7 @@ def show_paper_trading_page(cid, token):
             )
     else:
         st.info("No trade history yet")
+    
     if st.button("🔄 Reset Paper Trading"):
         st.session_state.paper_trades = []
         st.session_state.paper_positions = {}
@@ -727,17 +869,24 @@ def show_paper_trading_page(cid, token):
         st.session_state["last_signal"] = None
         st.success("Paper trading data reset!")
 
-# --- Main Application ---
+# Main application
 def main():
-    st.set_page_config(layout="wide")
+    # Initialize everything
+    # st.set_page_config(layout="wide")
     init_session_state()
+    load_credentials()
+    
+    # Global refresh
     st_autorefresh(interval=Config.REFRESH_INTERVAL * 1000, key="global_refresh")
     st.title("Fyers Algo Trading")
-    # --- Sidebar ---
+    
+    # Settings sidebar
     with st.sidebar:
         st.subheader("⚙️ Trading Settings")
         auto_trade = st.checkbox("Enable Auto Trade", value=False)
         paper_trade = st.checkbox("📝 Enable Paper Trading", value=False)
+
+        # Navigation
         st.subheader("📊 Navigation")
         if st.button("📈 Signal History"):
             st.session_state.page = "signal_history"
@@ -746,13 +895,19 @@ def main():
         if paper_trade:
             if st.button("📊 Paper Trading Dashboard"):
                 st.session_state.page = "paper_trading"
+
+        # Credentials
         st.subheader("🔐 API Credentials")
         cid = st.text_input("Client ID", value=st.session_state.cid)
         token = st.text_input("Access Token", type="password", value=st.session_state.token)
         sym = st.selectbox('Choose Index: ', ['NSE:NIFTY50-INDEX', 'BSE:SENSEX-INDEX'])
         st.write(f'You selected: {sym}')
+
+        # Store credentials
         st.session_state.cid = cid
         st.session_state.token = token
+
+        # API usage
         st.subheader("📊 API Usage")
         oc = st.session_state.get("option_chain_api_count", 0)
         qc = st.session_state.get("quote_api_count", 0)
@@ -760,27 +915,36 @@ def main():
         st.write(f"Quote API: {qc}")
         st.write(f"Total: {oc + qc}/{Config.API_RATE_LIMIT} per minute")
 
+    # Early return if no credentials
     if not (cid and token and sym):
         st.info("Enter credentials in the sidebar.")
         return
 
+    # Update data
     ltp, chain, curr_date = update_all_data(cid, token, sym, paper_trade)
+
     ist = pytz.timezone("Asia/Kolkata")
     st.write(f"🕒 Updated: {datetime.now(ist).strftime('%Y-%m-%d %H:%M:%S')}")
+
     if ltp:
         st.success(f"📊 Underlying LTP: {ltp}")
 
+    # Page routing
     if st.session_state.page == "signal_history":
         show_signal_history()
         return
+
     if st.session_state.page == "paper_trading" and paper_trade:
         show_paper_trading_page(cid, token)
         return
 
+    # Main trading page
     st.subheader("📈 Live Trading")
+
     if chain:
-        result, atm = format_and_show(chain, f"Current Expiry: {curr_date}", ltp, show_signals=True)
-        signal = result["signal"] if result else None
+        signal, atm = format_and_show(chain, f"Current Expiry: {curr_date}", ltp, show_signals=True)
+
+        # Record signal history
         if signal and ltp:
             timestamp = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.signal_history.append({
@@ -789,12 +953,20 @@ def main():
                 "underlying_ltp": ltp,
                 "expiry_date": curr_date
             })
+
+        # Select strikes
         sell_pe, buy_pe, sell_ce, buy_ce = select_strikes_atm_half_price(chain, atm)
+
+        # Validate pairs
         valid_buy = (sell_pe is not None and buy_pe is not None)
         valid_sell = (sell_ce is not None and buy_ce is not None)
+
+        # Initialize Fyers for auto trading
         fy = None
         if auto_trade:
             fy = fyersModel.FyersModel(client_id=cid, token=token, is_async=False, log_path="")
+
+        # Trading logic
         if signal == "BUY" and not valid_buy:
             st.warning("Missing option data for BUY signal. Unable to place trade.")
         elif signal == "SELL" and not valid_sell:
